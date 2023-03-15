@@ -86,20 +86,34 @@ void displayTask(void *p_params)
   uint8_t displayState = 0; // Set start case to 0
   while (true)
   {
-    switch (displayState)
-    {
-    case 0: // Homing sequence
-    {
-
-      break;
-    }
-    case 1: // Check if motors have stopped
-    {
-
-      break;
-    }
-      vTaskDelay(100); // Task period
-    }
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 0);
+    display.println("MMAKF");
+    display.setTextSize(1);
+    display.setCursor(10, 20);
+    display.print("Actual:");
+    display.setCursor(60, 20);
+    display.print("dist");
+    display.setCursor(10, 30);
+    display.print("KF 1:");
+    display.setCursor(60, 30);
+    display.print("dist");
+    display.setCursor(10, 40);
+    display.print("KF 2:");
+    display.setCursor(60, 40);
+    display.print("dist");
+    display.setCursor(10, 50);
+    display.print("KF 3:");
+    display.setCursor(60, 50);
+    display.print("dist");
+    display.setCursor(10, 60);
+    display.print("MMAKF: ");
+    display.setCursor(60, 60);
+    display.print("dist");
+    display.display();
+    vTaskDelay(100); // Task period
   }
 }
 //********************************************************************************
@@ -155,20 +169,12 @@ void arduinoTask(void *p_params)
   uint8_t arduinoState = 0; // Set start case to 0
   while (true)
   {
-    switch (arduinoState)
+    while (Arduino.available())
     {
-    case 0: // Homing sequence
-    {
-
-      break;
+      str = Arduino.readString();
+      tx_time = str.toInt();
     }
-    case 1: // Check if motors have stopped
-    {
-
-      break;
-    }
-      vTaskDelay(100); // Task period
-    }
+    vTaskDelay(100); // Task period
   }
 }
 //********************************************************************************
@@ -200,7 +206,6 @@ void limitSwitchTask(void *p_params)
 // End of Task declarations
 //********************************************************************************
 
-
 //********************************************************************************
 // Setup FreeRTOS tasks and start scheduler
 //********************************************************************************
@@ -216,6 +221,24 @@ void setup()
   pinMode(MOTOR_2, OUTPUT);
   pinMode(LIM_PIN, INPUT);
   pinMode(SLIDER_PIN, INPUT);
+
+  // Arduino communication setup
+  HardwareSerial Arduino(2);
+
+  // Reset OLED
+  pinMode(OLED_RST, OUTPUT);
+  digitalWrite(OLED_RST, LOW);
+  delay(20);
+  digitalWrite(OLED_RST, HIGH);
+
+  // Initialize OLED
+  Wire.begin(OLED_SDA, OLED_SCL);
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false))
+  {
+    Serial.println(F("OLED not found"));
+    while (1)
+      ;
+  }
 
   // Start FreeRTOS tasks
   xTaskCreate(mainController, "Motor 1 Task", 10000, NULL, 3, NULL);
