@@ -55,6 +55,9 @@ Motor motor(MOTOR_1, MOTOR_2);
 //********************************************************************************
 // Task declarations
 //********************************************************************************
+
+//********************************************************************************
+// Main FSM
 void mainController(void *p_params)
 {
   uint8_t mainState = 0; // Set start case to 0
@@ -76,7 +79,8 @@ void mainController(void *p_params)
     }
   }
 }
-
+//********************************************************************************
+// OLED display task
 void displayTask(void *p_params)
 {
   uint8_t displayState = 0; // Set start case to 0
@@ -98,7 +102,8 @@ void displayTask(void *p_params)
     }
   }
 }
-
+//********************************************************************************
+// Input slider task
 void controlInputTask(void *p_params)
 {
   uint8_t controlInputState = 0; // Set start case to 0
@@ -120,7 +125,8 @@ void controlInputTask(void *p_params)
     }
   }
 }
-
+//********************************************************************************
+// Accelerometer reading task
 void accelerometerTask(void *p_params)
 {
   uint8_t accelState = 0; // Set start case to 0
@@ -142,7 +148,8 @@ void accelerometerTask(void *p_params)
     }
   }
 }
-
+//********************************************************************************
+// Arduino communication task
 void arduinoTask(void *p_params)
 {
   uint8_t arduinoState = 0; // Set start case to 0
@@ -164,7 +171,8 @@ void arduinoTask(void *p_params)
     }
   }
 }
-
+//********************************************************************************
+// Limit switch task
 void limitSwitchTask(void *p_params)
 {
   uint8_t limitState = 0; // Set start case to 0
@@ -194,14 +202,8 @@ void limitSwitchTask(void *p_params)
 
 
 //********************************************************************************
-// End of Task declarations
+// Setup FreeRTOS tasks and start scheduler
 //********************************************************************************
-
-
-/**
- * @brief Main program that sets up FreeRTOS tasks and starts the scheduler
- *
- */
 void setup()
 {
   Serial.begin(115200); // Begin serial monitor
