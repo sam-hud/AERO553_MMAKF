@@ -1,11 +1,3 @@
-/**
- * @file main.cpp
- * @author Sam Hudson, Dylan Ruiz, Scott Dunn
- * @brief Main file for controlling the ChessBot
- * @version 1.0
- * @date 2022-12-06
- *
- */
 #include <Arduino.h>
 #include <Wire.h>             // This library allows you to communicate with I2C devices.
 #include <Adafruit_GFX.h>     // Core graphics library
@@ -23,6 +15,11 @@
 // Input pins
 #define LIM_PIN 2
 #define SLIDER_PIN 3
+
+// Arduino Serial Setup
+#define RXD 13
+#define TXD 17
+HardwareSerial Arduino(2);
 
 // OLED
 #define OLED_SDA 4
@@ -125,12 +122,12 @@ void controlInputTask(void *p_params)
   {
     switch (controlInputState)
     {
-    case 0: // Homing sequence
+    case 0:
     {
 
       break;
     }
-    case 1: // Check if motors have stopped
+    case 1:
     {
 
       break;
@@ -148,12 +145,12 @@ void accelerometerTask(void *p_params)
   {
     switch (accelState)
     {
-    case 0: // Homing sequence
+    case 0:
     {
 
       break;
     }
-    case 1: // Check if motors have stopped
+    case 1:
     {
 
       break;
@@ -166,13 +163,12 @@ void accelerometerTask(void *p_params)
 // Arduino communication task
 void arduinoTask(void *p_params)
 {
-  uint8_t arduinoState = 0; // Set start case to 0
   while (true)
   {
     while (Arduino.available())
     {
-      str = Arduino.readString();
-      tx_time = str.toInt();
+      // str = Arduino.readString();
+      // put string into shared variable
     }
     vTaskDelay(100); // Task period
   }
@@ -221,9 +217,6 @@ void setup()
   pinMode(MOTOR_2, OUTPUT);
   pinMode(LIM_PIN, INPUT);
   pinMode(SLIDER_PIN, INPUT);
-
-  // Arduino communication setup
-  HardwareSerial Arduino(2);
 
   // Reset OLED
   pinMode(OLED_RST, OUTPUT);
