@@ -14,7 +14,7 @@
 
 /** @brief   Constructor which creates a motor object.
  */
-Motor::Motor(uint_8t PIN_1, uint_8t PIN_2)
+Motor::Motor(uint8_t PIN_1, uint8_t PIN_2)
 {
   this->PIN_1 = PIN_1;
   this->PIN_2 = PIN_2;

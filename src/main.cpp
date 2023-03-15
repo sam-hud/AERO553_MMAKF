@@ -7,20 +7,22 @@
  *
  */
 #include <Arduino.h>
-#include <SPI.h>
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <HardwareSerial.h>
-#include "Motor.h"
-#include "taskshare.h" // Header for inter-task shared data
-#include "taskqueue.h" // Header for inter-task data queues
-#include "shares.h"    // Header for shares used in this project
+#include <Wire.h>             // This library allows you to communicate with I2C devices.
+#include <Adafruit_GFX.h>     // Core graphics library
+#include <Adafruit_SSD1306.h> // Hardware-specific library for SSD1306 displays
+#include <HardwareSerial.h>   // Serial communication
+#include "Motor.h"            // Header for motor class
+#include "taskshare.h"        // Header for inter-task shared data
+#include "taskqueue.h"        // Header for inter-task data queues
+#include "shares.h"           // Header for shares used in this project
 
 // Motor pins
-#define EN_PIN_1 14   // LOW: Driver enabled. HIGH: Driver disabled
-#define STEP_PIN_1 33 // Step on rising edge
-#define DIR_PIN_1 32
+#define MOTOR_1 12
+#define MOTOR_2 13
+
+// Input pins
+#define LIM_PIN 2
+#define SLIDER_PIN 3
 
 // OLED
 #define OLED_SDA 4
@@ -48,57 +50,153 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 // Share<bool> startLimity("Start Limit Y");
 
 // Create each motor driver object
-Motor motor1(EN_PIN_1, STEP_PIN_1, DIR_PIN_1);
+Motor motor(MOTOR_1, MOTOR_2);
 
-// Motor, screen, slider, accelerometer, arduino,
-
-/**
- * @brief Task for main controller
- *
- * @param p_params void pointer for FreeRTOS setup
- */
+//********************************************************************************
+// Task declarations
+//********************************************************************************
 void mainController(void *p_params)
 {
+  uint8_t mainState = 0; // Set start case to 0
   while (true)
   {
-    switch (case)
+    switch (mainState)
     {
-      switch (state)
-      {
-      case 0: // Homing sequence
-      {
+    case 0: // Homing sequence
+    {
 
-        break;
-      }
-      case 1: // Check if motors have stopped
-      {
+      break;
+    }
+    case 1: // Check if motors have stopped
+    {
 
-        break;
-      }
-      }
+      break;
+    }
       vTaskDelay(100); // Task period
     }
   }
 }
 
-/**
- * @brief Task for checking limit switches
- *
- * @param p_params void pointer for FreeRTOS setup
- */
-void limitSwitchTask(void *p_params)
+void displayTask(void *p_params)
 {
+  uint8_t displayState = 0; // Set start case to 0
   while (true)
   {
-    // check limit switches
+    switch (displayState)
+    {
+    case 0: // Homing sequence
+    {
 
-    vTaskDelay(100); // Task period
+      break;
+    }
+    case 1: // Check if motors have stopped
+    {
+
+      break;
+    }
+      vTaskDelay(100); // Task period
+    }
   }
 }
 
-/* --- End of task definitions for FreeRTOS tasks --- */
+void controlInputTask(void *p_params)
+{
+  uint8_t controlInputState = 0; // Set start case to 0
+  while (true)
+  {
+    switch (controlInputState)
+    {
+    case 0: // Homing sequence
+    {
 
-/* --- Setup and begin multitasking --- */
+      break;
+    }
+    case 1: // Check if motors have stopped
+    {
+
+      break;
+    }
+      vTaskDelay(100); // Task period
+    }
+  }
+}
+
+void accelerometerTask(void *p_params)
+{
+  uint8_t accelState = 0; // Set start case to 0
+  while (true)
+  {
+    switch (accelState)
+    {
+    case 0: // Homing sequence
+    {
+
+      break;
+    }
+    case 1: // Check if motors have stopped
+    {
+
+      break;
+    }
+      vTaskDelay(100); // Task period
+    }
+  }
+}
+
+void arduinoTask(void *p_params)
+{
+  uint8_t arduinoState = 0; // Set start case to 0
+  while (true)
+  {
+    switch (arduinoState)
+    {
+    case 0: // Homing sequence
+    {
+
+      break;
+    }
+    case 1: // Check if motors have stopped
+    {
+
+      break;
+    }
+      vTaskDelay(100); // Task period
+    }
+  }
+}
+
+void limitSwitchTask(void *p_params)
+{
+  uint8_t limitState = 0; // Set start case to 0
+  while (true)
+  {
+    switch (limitState)
+    {
+    case 0: // Check if limit switch is pressed
+    {
+      if (digitalRead(LIM_PIN) == HIGH)
+      {
+        limitState = 1;
+      }
+      break;
+    }
+      {
+
+        vTaskDelay(100); // Task period
+      }
+    }
+  }
+}
+
+//********************************************************************************
+// End of Task declarations
+//********************************************************************************
+
+
+//********************************************************************************
+// End of Task declarations
+//********************************************************************************
+
 
 /**
  * @brief Main program that sets up FreeRTOS tasks and starts the scheduler
@@ -112,15 +210,18 @@ void setup()
   } // Wait for port to be ready before continuing
 
   // Setup pins
-  pinMode(EN_PIN_1, OUTPUT);
-  pinMode(STEP_PIN_1, OUTPUT);
+  pinMode(MOTOR_1, OUTPUT);
+  pinMode(MOTOR_2, OUTPUT);
   pinMode(LIM_PIN, INPUT);
   pinMode(SLIDER_PIN, INPUT);
 
   // Start FreeRTOS tasks
-  xTaskCreate(defMotorTask, "Motor 1 Task", 10000, NULL, 3, NULL);
-  xTaskCreate(defControllerTask, "Controller Task", 10000, NULL, 2, NULL);
-  xTaskCreate(defLimitTask, "Limit Task", 4096, NULL, 3, NULL);
+  xTaskCreate(mainController, "Motor 1 Task", 10000, NULL, 3, NULL);
+  xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
+  xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 3, NULL);
+  xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
+  xTaskCreate(arduinoTask, "Arduino Communication Task", 4096, NULL, 3, NULL);
+  xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 3, NULL);
 }
 
 /**
