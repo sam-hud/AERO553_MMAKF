@@ -1,31 +1,25 @@
 /** @file Motor.cpp
  *  @brief Creates a motor class to interface with a brushless DC motor
- *  @details It works by seting motor pins as inputs and passing a PWM signal to 
- *  one of the pins and sets the other as high per the motor driver data sheet. 
+ *  @details It works by seting motor pins as inputs and passing a PWM signal to
+ *  one of the pins and sets the other as high per the motor driver data sheet.
  *  @author Nolan Clapp
  *  @date 2022-Oct-26 Original file by Clapp
- *  
+ *
  */
 
 #include <Arduino.h>
 #include <PrintStream.h>
-#include "IMU_R.h"
 #include "Motor.h"
 #include "Wire.h" // This library allows you to communicate with I2C devices.
 
 /** @brief   Constructor which creates a motor object.
-*/
-Motor::Motor(void)
+ */
+Motor::Motor(uint_8t PIN_1, uint_8t PIN_2)
 {
-  /** @brief   First Motor Pin
-  */
-  Motor::PIN_1=12; // motor pin1
-  /** @brief   Second Motor Pin
-  */
-  Motor::PIN_2=14; // motor pin2
-  pinMode(Motor::PIN_1, INPUT);
-  pinMode(Motor::PIN_2, INPUT);
-  
+  this->PIN_1 = PIN_1;
+  this->PIN_2 = PIN_2;
+  pinMode(PIN_1, INPUT);
+  pinMode(PIN_2, INPUT);
 }
 /** @brief   Method sets the motor speed (0-255)
  *  @details This method sets the motor speed by passing in a PWM

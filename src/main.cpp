@@ -7,15 +7,17 @@
  *
  */
 #include <Arduino.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <HardwareSerial.h>
+#include "Motor.h"
 #include "taskshare.h" // Header for inter-task shared data
 #include "taskqueue.h" // Header for inter-task data queues
 #include "shares.h"    // Header for shares used in this project
-#include "objects/MotorDriver.h"
-#include "tasks/ControllerTask.h"
-#include "tasks/MotorTask.h"
-#include "tasks/LimitSwitchTask.h"
 
-// Motor 1 pins
+// Motor pins
 #define EN_PIN_1 14   // LOW: Driver enabled. HIGH: Driver disabled
 #define STEP_PIN_1 33 // Step on rising edge
 #define DIR_PIN_1 32
@@ -29,77 +31,53 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
 /* Define Shares*/
-Share<bool> stopMotor1("Stop Motor 1");
-Share<bool> stopMotor2("Stop  Motor 2");
-Share<bool> beginMove("Begin Move");
-Queue<float> directionsQueue(5, "Directions Queue");
-Share<uint16_t> steps1("No. of steps for Motor 1");
-Share<uint16_t> steps2("No. of steps for Motor 2");
-Share<float> velocity1("Steps/sec for Motor 1");
-Share<float> velocity2("Steps/sec for Motor 2");
-Share<int8_t> dirMotor1("Motor 1 Direction");
-Share<int8_t> dirMotor2("Motor 2 Direction");
-Share<uint8_t> startMotor1("Start Motor 1");
-Share<uint8_t> startMotor2("Start Motor 2");
-Share<bool> moveComplete("Move Complete");
-Share<bool> startLimitx("Start Limit X");
-Share<bool> startLimity("Start Limit Y");
+// Share<bool> stopMotor1("Stop Motor 1");
+// Share<bool> stopMotor2("Stop  Motor 2");
+// Share<bool> beginMove("Begin Move");
+// Queue<float> directionsQueue(5, "Directions Queue");
+// Share<uint16_t> steps1("No. of steps for Motor 1");
+// Share<uint16_t> steps2("No. of steps for Motor 2");
+// Share<float> velocity1("Steps/sec for Motor 1");
+// Share<float> velocity2("Steps/sec for Motor 2");
+// Share<int8_t> dirMotor1("Motor 1 Direction");
+// Share<int8_t> dirMotor2("Motor 2 Direction");
+// Share<uint8_t> startMotor1("Start Motor 1");
+// Share<uint8_t> startMotor2("Start Motor 2");
+// Share<bool> moveComplete("Move Complete");
+// Share<bool> startLimitx("Start Limit X");
+// Share<bool> startLimity("Start Limit Y");
 
 // Create each motor driver object
 Motor motor1(EN_PIN_1, STEP_PIN_1, DIR_PIN_1);
-Motor motor2(EN_PIN_2, STEP_PIN_2, DIR_PIN_2);
 
-// Create motor task objects using motor driver objects
-MotorTask motorTask1(motor1, stopMotor1, dirMotor1, velocity1, steps1, startMotor1);
-MotorTask motorTask2(motor2, stopMotor2, dirMotor2, velocity2, steps2, startMotor2);
-
-// Create Limit Switch task object
-LimitSwitchTask limitTask(XLIM_PIN, YLIM_PIN);
-
-// Create main controller
-Controller mainController(SOLENOID_PIN, SENSOR_PIN);
-
-/* --- Define tasks for FreeRTOS --- */
-
-/**
- * @brief Task for controlling motor 1
- *
- * @param p_params void pointer for FreeRTOS setup
- */
-void defMotorTask1(void *p_params)
-{
-  while (true)
-  {
-    motorTask1.run();
-    vTaskDelay(20); // Task period
-  }
-}
-
-/**
- * @brief Task for controlling motor 2
- *
- * @param p_params void pointer for FreeRTOS setup
- */
-void defMotorTask2(void *p_params)
-{
-  while (true)
-  {
-    motorTask2.run();
-    vTaskDelay(20); // Task period
-  }
-}
+// Motor, screen, slider, accelerometer, arduino,
 
 /**
  * @brief Task for main controller
  *
  * @param p_params void pointer for FreeRTOS setup
  */
-void defControllerTask(void *p_params)
+void mainController(void *p_params)
 {
   while (true)
   {
-    mainController.run();
-    vTaskDelay(100); // Task period
+    switch (case)
+    {
+      switch (state)
+      {
+      case 0: // Homing sequence
+      {
+
+        break;
+      }
+      case 1: // Check if motors have stopped
+      {
+
+        break;
+      }
+      }
+      vTaskDelay(100); // Task period
+    }
   }
 }
 
@@ -108,12 +86,13 @@ void defControllerTask(void *p_params)
  *
  * @param p_params void pointer for FreeRTOS setup
  */
-void defLimitTask(void *p_params)
+void limitSwitchTask(void *p_params)
 {
   while (true)
   {
-    limitTask.run();
-    vTaskDelay(20); // Task period
+    // check limit switches
+
+    vTaskDelay(100); // Task period
   }
 }
 
@@ -135,14 +114,11 @@ void setup()
   // Setup pins
   pinMode(EN_PIN_1, OUTPUT);
   pinMode(STEP_PIN_1, OUTPUT);
-  pinMode(XLIM_PIN, INPUT);
-  pinMode(YLIM_PIN, INPUT);
-  pinMode(SENSOR_PIN, INPUT);
-  pinMode(SOLENOID_PIN, OUTPUT);
+  pinMode(LIM_PIN, INPUT);
+  pinMode(SLIDER_PIN, INPUT);
 
   // Start FreeRTOS tasks
-  xTaskCreate(defMotorTask1, "Motor 1 Task", 10000, NULL, 3, NULL);
-  xTaskCreate(defMotorTask2, "Motor 2 Task", 10000, NULL, 3, NULL);
+  xTaskCreate(defMotorTask, "Motor 1 Task", 10000, NULL, 3, NULL);
   xTaskCreate(defControllerTask, "Controller Task", 10000, NULL, 2, NULL);
   xTaskCreate(defLimitTask, "Limit Task", 4096, NULL, 3, NULL);
 }
