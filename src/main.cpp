@@ -20,20 +20,13 @@
 #define STEP_PIN_1 33 // Step on rising edge
 #define DIR_PIN_1 32
 
-// Motor 2 pins
-#define EN_PIN_2 13   // LOW: Driver enabled. HIGH: Driver disabled
-#define STEP_PIN_2 26 // Step on rising edge
-#define DIR_PIN_2 25
-
-// Limit switch pins
-#define XLIM_PIN 2
-#define YLIM_PIN 15
-
-// Solenoid pin
-#define SOLENOID_PIN 4
-
-// Sensor pin
-#define SENSOR_PIN 39
+// OLED
+#define OLED_SDA 4
+#define OLED_SCL 15
+#define OLED_RST 16
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
 /* Define Shares*/
 Share<bool> stopMotor1("Stop Motor 1");

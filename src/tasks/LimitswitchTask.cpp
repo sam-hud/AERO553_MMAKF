@@ -16,12 +16,11 @@
  * @param XLIM_PIN X limit switch pin
  * @param YLIM_PIN Y limit switch pin
  */
-LimitSwitchTask::LimitSwitchTask(uint8_t XLIM_PIN, uint8_t YLIM_PIN)
+LimitSwitchTask::LimitSwitchTask(uint8_t PIN)
 {
     int state = 0; // Start state
     // Set pins
-    this->XLIM_PIN = XLIM_PIN;
-    this->YLIM_PIN = YLIM_PIN;
+    this->PIN = PIN;
 
     // Ensures task does not start until start signal is received
     startLimitx.put(false);

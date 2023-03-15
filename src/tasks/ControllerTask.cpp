@@ -23,15 +23,15 @@ Controller::Controller(uint8_t SOLENOID_PIN, uint8_t SENSOR_PIN)
     this->SENSOR_PIN = SENSOR_PIN;
     state = 0; // Start state = 0
     stepLength = .1;
-    xCoordinateFrom = 0; // Define x coordinate of the piece to be moved
-    yCoordinateFrom = 0; // Define y coordinate of the piece to be moved
-    xCoordinateTo = 0; // Define x coordinate of the piece to be moved to
-    yCoordinateTo = 0; // Define y coordinate of the piece to be moved to
-    takePiece = 0; // If takePiece = 1, then a piece needs to be taken
-    moveTake = 0; // If moveTake = 1, then a move to the piece is needed (for FSM control)
-    xPieceGraveyard = 520; // x coordinate of the piece graveyard
+    xCoordinateFrom = 0;           // Define x coordinate of the piece to be moved
+    yCoordinateFrom = 0;           // Define y coordinate of the piece to be moved
+    xCoordinateTo = 0;             // Define x coordinate of the piece to be moved to
+    yCoordinateTo = 0;             // Define y coordinate of the piece to be moved to
+    takePiece = 0;                 // If takePiece = 1, then a piece needs to be taken
+    moveTake = 0;                  // If moveTake = 1, then a move to the piece is needed (for FSM control)
+    xPieceGraveyard = 520;         // x coordinate of the piece graveyard
     yPieceGraveyard = 522.5 - 180; // y coordinate of the piece graveyard
-    sensorOffset = 18.25; // Offset for the IR sensor to the actuator magnet
+    sensorOffset = 18.25;          // Offset for the IR sensor to the actuator magnet
 
     beginMove.put(false); // Ensure that no moves have started
     uint8_t count = 0;
@@ -296,12 +296,9 @@ void Controller::origin_y()
 /**
  * @brief Moves the carriage to the desired board coordinates
  *
- * @param moveFromX Starting x coordinate
- * @param moveFromY Starting y coordinate
- * @param moveToX Destination x coordinate
- * @param moveToY Destination y coordinate
+ * @param move
  */
-void Controller::movePiece(float moveFromX, float moveFromY, float moveToX, float moveToY) // State 2
+void Controller::movePiece(float move) // State 2
 {
     float Dx = moveToX - moveFromX; // mm
     float Dy = moveToY - moveFromY; // mm
@@ -315,135 +312,6 @@ void Controller::movePiece(float moveFromX, float moveFromY, float moveToX, floa
     velocity1.put(velocityMotor1);
     velocity2.put(velocityMotor2);
 
-
     startMotor1.put(1);
     startMotor2.put(1);
-}
-
-/**
- * @brief Release the actuator such that it can grab a piece
- *
- */
-void Controller::grabPiece() // State 3
-{
-    digitalWrite(SOLENOID_PIN, LOW);
-}
-
-/**
- * @brief Move the piece from the center of the square to the grid
- *
- */
-void Controller::centerToGrid() // State 4
-{
-    movePiece(0, -30, 0, -30);
-}
-
-/**
- * @brief Move the piece from the grid to the center of the square
- *
- */
-void Controller::gridToCenter() // State 7
-{
-    movePiece(0, 30, 0, 30);
-}
-
-/**
- * @brief Move the piece from the grid to the graveyard
- *
- */
-void Controller::gridToGraveyard() // State 4
-{
-    movePiece(0, 10, 0, 30);
-}
-
-/**
- * @brief Move the piece along the x grid
- *
- * @param xFrom Starting x grid coordinate
- * @param xTo Destination x grid coordinate
- */
-void Controller::xGridMove(uint16_t xFrom, uint16_t xTo) // State 5
-{
-    int16_t xMove = xTo - xFrom; // mm
-    uint16_t numSteps = abs(xMove / (stepLength));
-    int8_t direction = 0;
-    if (xMove == 0)
-    {
-        stopMotor1.put(true);
-        stopMotor2.put(true);
-    }
-    else
-    {
-        if (xMove < 0)
-        {
-            direction = 1;
-        }
-        else
-        {
-            direction = -1;
-        }
-        steps1.put(numSteps);
-        steps2.put(numSteps);
-        dirMotor1.put(direction);
-        dirMotor2.put(direction);
-        startMotor1.put(2);
-        startMotor2.put(2);
-    }
-}
-/**
- * @brief Move the piece along the y grid
- *
- * @param yFrom Starting y grid coordinate
- * @param yTo Destination y grid coordinate
- */
-void Controller::yGridMove(uint16_t yTo, uint16_t yFrom) // State 6
-{
-    int16_t yMove = yTo - yFrom; // mm
-    uint16_t numSteps = abs(yMove / (stepLength));
-    int8_t direction1 = 0;
-    int8_t direction2 = 0;
-    if (yMove == 0)
-    {
-        stopMotor1.put(true);
-        stopMotor2.put(true);
-    }
-    else
-    {
-        if (yMove < 0)
-        {
-            direction1 = 1;
-            direction2 = -1;
-        }
-        else
-        {
-            direction1 = -1;
-            direction2 = 1;
-        }
-        steps1.put(numSteps);
-        steps2.put(numSteps);
-        dirMotor1.put(direction1);
-        dirMotor2.put(direction2);
-        startMotor1.put(2);
-        startMotor2.put(2);
-    }
-}
-
-/**
- * @brief Activate the actuator to release the piece
- *
- */
-void Controller::releasePiece() // State 8
-{
-    digitalWrite(SOLENOID_PIN, HIGH);
-}
-
-/**
- * @brief Check if a piece is detected by the sensor
- *
- * @return true If a piece is detected
- * @return false If no piece is detected
- */
-bool Controller::detectPiece()
-{
-    return digitalRead(SENSOR_PIN) == LOW;
 }
