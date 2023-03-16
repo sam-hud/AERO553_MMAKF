@@ -6,7 +6,6 @@
 #include "Motor.h"            // Header for motor class
 #include "taskshare.h"        // Header for inter-task shared data
 #include "taskqueue.h"        // Header for inter-task data queues
-#include "shares.h"           // Header for shares used in this project
 
 // Motor pins
 #define MOTOR_1 12
@@ -30,21 +29,14 @@ HardwareSerial Arduino(2);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
 /* Define Shares*/
-// Share<bool> stopMotor1("Stop Motor 1");
-// Share<bool> stopMotor2("Stop  Motor 2");
-// Share<bool> beginMove("Begin Move");
-// Queue<float> directionsQueue(5, "Directions Queue");
-// Share<uint16_t> steps1("No. of steps for Motor 1");
-// Share<uint16_t> steps2("No. of steps for Motor 2");
-// Share<float> velocity1("Steps/sec for Motor 1");
-// Share<float> velocity2("Steps/sec for Motor 2");
-// Share<int8_t> dirMotor1("Motor 1 Direction");
-// Share<int8_t> dirMotor2("Motor 2 Direction");
-// Share<uint8_t> startMotor1("Start Motor 1");
-// Share<uint8_t> startMotor2("Start Motor 2");
-// Share<bool> moveComplete("Move Complete");
-// Share<bool> startLimitx("Start Limit X");
-// Share<bool> startLimity("Start Limit Y");
+Queue<float> motor(5, "Motor Speed");
+Share<bool> limitSwitchPressed("Limit Switch Pressed");
+Share<uint16_t> sliderPosition("Slider Position");
+Share<float> actualMotorPosition("Actual Motor Position");
+Share<float> KF1MotorPosition("KF1 Motor Position");
+Share<float> KF2MotorPosition("KF2 Motor Position");
+Share<float> KF3MotorPosition("KF3 Motor Position");
+Share<float> MMAKFMotorPosition("MMAKF Motor Position");
 
 // Create each motor driver object
 Motor motor(MOTOR_1, MOTOR_2);
@@ -74,29 +66,36 @@ void displayTask(void *p_params)
     display.clearDisplay();
     display.setTextSize(2);
     display.setTextColor(WHITE);
+
     display.setCursor(0, 0);
     display.println("MMAKF");
     display.setTextSize(1);
+
     display.setCursor(10, 20);
     display.print("Actual:");
     display.setCursor(60, 20);
-    display.print("dist");
+    display.print(actualMotorPosition.get());
+
     display.setCursor(10, 30);
     display.print("KF 1:");
     display.setCursor(60, 30);
-    display.print("dist");
+    display.print(KF1MotorPosition.get());
+
     display.setCursor(10, 40);
     display.print("KF 2:");
     display.setCursor(60, 40);
-    display.print("dist");
+    display.print(KF2MotorPosition.get());
+
     display.setCursor(10, 50);
     display.print("KF 3:");
     display.setCursor(60, 50);
-    display.print("dist");
+    display.print(KF3MotorPosition.get());
+
     display.setCursor(10, 60);
     display.print("MMAKF: ");
     display.setCursor(60, 60);
-    display.print("dist");
+    display.print(MMAKFMotorPosition.get());
+
     display.display();
     vTaskDelay(100); // Task period
   }
@@ -108,6 +107,8 @@ void controlInputTask(void *p_params)
   while (true)
   {
     // TODO: read slider input and set shared variable
+    uint16_t sliderValue = analogRead(SLIDER_PIN);
+    sliderPosition.put(sliderValue);
     vTaskDelay(100); // Task period
   }
 }
@@ -141,7 +142,16 @@ void limitSwitchTask(void *p_params)
 {
   while (true)
   {
-    // TODO: check limit switch, stop motors if pressed
+    bool limitSwitchStatus = digitalRead(LIM_PIN);
+    if (limitSwitchStatus == HIGH) // TODO: check if this is correct
+    {
+      limitSwitchPressed.put(true);
+    }
+    else
+    {
+      limitSwitchPressed.put(false);
+    }
+    vTaskDelay(100); // Task period
   }
 }
 
