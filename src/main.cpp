@@ -83,6 +83,7 @@ void displayTask(void *p_params)
   uint8_t displayState = 0; // Set start case to 0
   while (true)
   {
+    // TODO: set task period based on incoming queue data
     display.clearDisplay();
     display.setTextSize(2);
     display.setTextColor(WHITE);
@@ -117,23 +118,10 @@ void displayTask(void *p_params)
 // Input slider task
 void controlInputTask(void *p_params)
 {
-  uint8_t controlInputState = 0; // Set start case to 0
   while (true)
   {
-    switch (controlInputState)
-    {
-    case 0:
-    {
-
-      break;
-    }
-    case 1:
-    {
-
-      break;
-    }
-      vTaskDelay(100); // Task period
-    }
+    // TODO: read slider input and set shared variable
+    vTaskDelay(100); // Task period
   }
 }
 //********************************************************************************
@@ -143,20 +131,7 @@ void accelerometerTask(void *p_params)
   uint8_t accelState = 0; // Set start case to 0
   while (true)
   {
-    switch (accelState)
-    {
-    case 0:
-    {
-
-      break;
-    }
-    case 1:
-    {
-
-      break;
-    }
-      vTaskDelay(100); // Task period
-    }
+    // TODO: read accelerometer and set shared variable
   }
 }
 //********************************************************************************
@@ -177,24 +152,58 @@ void arduinoTask(void *p_params)
 // Limit switch task
 void limitSwitchTask(void *p_params)
 {
-  uint8_t limitState = 0; // Set start case to 0
   while (true)
   {
-    switch (limitState)
+    // TODO: check limit switch, stop motors if pressed
+  }
+}
+
+//********************************************************************************
+// Kalman filter task
+void kalmanFilterTask(void *p_params)
+{
+  uint8_t kalmanState = 0; // Set start case to 0
+  while (true)
+  {
+    switch (kalmanState)
     {
-    case 0: // Check if limit switch is pressed
+    case 0: // Initialize Kalman filter
     {
-      if (digitalRead(LIM_PIN) == HIGH)
-      {
-        limitState = 1;
-      }
+
       break;
     }
-      {
+    case 1: // Read accelerometer data
+    {
 
-        vTaskDelay(100); // Task period
-      }
+      break;
     }
+    case 2: // Read slider data
+    {
+
+      break;
+    }
+    case 3: // Read Arduino data
+    {
+
+      break;
+    }
+    case 4: // Calculate Kalman filter
+    {
+
+      break;
+    }
+    case 5: // Calculate MMAKF
+    {
+
+      break;
+    }
+    case 6: // Send data to OLED
+    {
+
+      break;
+    }
+    }
+    vTaskDelay(100); // Task period
   }
 }
 
