@@ -54,28 +54,15 @@ Motor motor(MOTOR_1, MOTOR_2);
 //********************************************************************************
 
 //********************************************************************************
-// Main FSM
-void mainController(void *p_params)
+// Motor Task
+void motorTask(void *p_params)
 {
-  uint8_t mainState = 0; // Set start case to 0
   while (true)
   {
-    switch (mainState)
-    {
-    case 0: // Homing sequence
-    {
-
-      break;
-    }
-    case 1: // Check if motors have stopped
-    {
-
-      break;
-    }
-      vTaskDelay(100); // Task period
-    }
+    // TODO: set motor speed based on incoming queue data
   }
 }
+
 //********************************************************************************
 // OLED display task
 void displayTask(void *p_params)
@@ -243,12 +230,12 @@ void setup()
   }
 
   // Start FreeRTOS tasks
-  xTaskCreate(mainController, "Motor 1 Task", 10000, NULL, 3, NULL);
   xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
   xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 3, NULL);
   xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
   xTaskCreate(arduinoTask, "Arduino Communication Task", 4096, NULL, 3, NULL);
   xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 3, NULL);
+  xTaskCreate(kalmanFilterTask, "Kalman Task", 10000, NULL, 3, NULL);
 }
 
 /**
