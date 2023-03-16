@@ -37,6 +37,7 @@ Share<float> KF1MotorPosition("KF1 Motor Position");
 Share<float> KF2MotorPosition("KF2 Motor Position");
 Share<float> KF3MotorPosition("KF3 Motor Position");
 Share<float> MMAKFMotorPosition("MMAKF Motor Position");
+Queue<float> arduinoReading(1, "Arduino Reading");
 
 // Create each motor driver object
 Motor motor(MOTOR_1, MOTOR_2);
@@ -130,10 +131,10 @@ void arduinoTask(void *p_params)
   {
     while (Arduino.available())
     {
-      // str = Arduino.readString();
-      // put string into shared variable
+      String arduinoRead = Arduino.readString();
+      arduinoReading.put(arduinoRead.toFloat());
+      // Task period controlled by Arduino reading
     }
-    vTaskDelay(100); // Task period
   }
 }
 //********************************************************************************
