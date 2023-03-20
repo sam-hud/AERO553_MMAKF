@@ -8,6 +8,8 @@
 #include "taskshare.h"        // Header for inter-task shared data
 #include "taskqueue.h"        // Header for inter-task data queues
 
+// TODO: Check pins
+
 // Motor pins
 #define MOTOR_1 12
 #define MOTOR_2 13
@@ -21,6 +23,8 @@
 #define RXD 13
 #define TXD 17
 HardwareSerial Arduino(2);
+
+// TODO: Accelerometer Setup
 
 // OLED
 #define OLED_SDA 4
@@ -46,17 +50,9 @@ Share<float> accelerometerReading("Accelerometer Reading");
 Motor motor(MOTOR_1, MOTOR_2);
 
 // Create Kalman Filters
-// This is where different Kalman Filter parameters can be set
-/*
- SimpleKalmanFilter(e_mea, e_est, q);
- e_mea: Measurement Uncertainty
- e_est: Estimation Uncertainty
- q: Process Noise
- */
 KalmanFilter KF1;
 KalmanFilter KF2;
 KalmanFilter KF3;
-unsigned long timer = 0;
 
 //********************************************************************************
 // Task declarations
@@ -181,6 +177,7 @@ void limitSwitchTask(void *p_params)
 void KF1Task(void *p_params)
 {
   // Kalman filter setup
+  unsigned long timer = 0;
   KF1.init(2);
   KF1.setProcessNoise(0.1, 0.01);
   KF1.setMeasurementNoise(0.1);
@@ -205,6 +202,7 @@ void KF1Task(void *p_params)
 void KF2Task(void *p_params)
 {
   // Kalman filter setup
+  unsigned long timer = 0;
   KF2.init(2);
   KF2.setProcessNoise(0.1, 0.01);
   KF2.setMeasurementNoise(0.1);
@@ -229,6 +227,7 @@ void KF2Task(void *p_params)
 void KF3Task(void *p_params)
 {
   // Kalman filter setup
+  unsigned long timer = 0;
   KF3.init(2);
   KF3.setProcessNoise(0.1, 0.01);
   KF3.setMeasurementNoise(0.1);
