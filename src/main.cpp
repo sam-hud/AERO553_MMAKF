@@ -3,6 +3,7 @@
 #include <Adafruit_GFX.h>     // Core graphics library
 #include <Adafruit_SSD1306.h> // Hardware-specific library for SSD1306 displays
 #include <HardwareSerial.h>   // Serial communication
+#include <kalman.h>           // Kalman Filter library
 #include "Motor.h"            // Header for motor class
 #include "taskshare.h"        // Header for inter-task shared data
 #include "taskqueue.h"        // Header for inter-task data queues
@@ -14,6 +15,7 @@
 // Input pins
 #define LIM_PIN 2
 #define SLIDER_PIN 3
+#define ACCEL_PIN 4
 
 // Arduino Serial Setup
 #define RXD 13
@@ -29,18 +31,32 @@ HardwareSerial Arduino(2);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
 /* Define Shares*/
-Queue<float> motor(5, "Motor Speed");
+Queue<float> motorSpeed(1, "Motor Speed");
 Share<bool> limitSwitchPressed("Limit Switch Pressed");
 Share<uint16_t> sliderPosition("Slider Position");
 Share<float> actualMotorPosition("Actual Motor Position");
 Share<float> KF1MotorPosition("KF1 Motor Position");
 Share<float> KF2MotorPosition("KF2 Motor Position");
 Share<float> KF3MotorPosition("KF3 Motor Position");
-Share<float> MMAKFMotorPosition("MMAKF Motor Position");
-Queue<float> arduinoReading(1, "Arduino Reading");
+Share<float> MMAEMotorPosition("MMAE Motor Position");
+Share<float> arduinoReading("Arduino Reading");
+Share<float> accelerometerReading("Accelerometer Reading");
 
 // Create each motor driver object
 Motor motor(MOTOR_1, MOTOR_2);
+
+// Create Kalman Filters
+// This is where different Kalman Filter parameters can be set
+/*
+ SimpleKalmanFilter(e_mea, e_est, q);
+ e_mea: Measurement Uncertainty
+ e_est: Estimation Uncertainty
+ q: Process Noise
+ */
+KalmanFilter KF1;
+KalmanFilter KF2;
+KalmanFilter KF3;
+unsigned long timer = 0;
 
 //********************************************************************************
 // Task declarations
@@ -53,6 +69,7 @@ void motorTask(void *p_params)
   while (true)
   {
     // TODO: set motor speed based on incoming queue data
+    motor.setSpeed(motorSpeed.get());
   }
 }
 
@@ -95,7 +112,7 @@ void displayTask(void *p_params)
     display.setCursor(10, 60);
     display.print("MMAKF: ");
     display.setCursor(60, 60);
-    display.print(MMAKFMotorPosition.get());
+    display.print(MMAEMotorPosition.get());
 
     display.display();
     vTaskDelay(100); // Task period
@@ -121,6 +138,9 @@ void accelerometerTask(void *p_params)
   while (true)
   {
     // TODO: read accelerometer and set shared variable
+    float accelValue = analogRead(ACCEL_PIN);
+    accelerometerReading.put(accelValue);
+    vTaskDelay(100); // Task period
   }
 }
 //********************************************************************************
@@ -157,50 +177,100 @@ void limitSwitchTask(void *p_params)
 }
 
 //********************************************************************************
-// Kalman filter task
-void kalmanFilterTask(void *p_params)
+// Kalman filter tasks
+void KF1Task(void *p_params)
 {
-  uint8_t kalmanState = 0; // Set start case to 0
+  // Kalman filter setup
+  KF1.init(2);
+  KF1.setProcessNoise(0.1, 0.01);
+  KF1.setMeasurementNoise(0.1);
+
   while (true)
   {
-    switch (kalmanState)
-    {
-    case 0: // Initialize Kalman filter
-    {
+    float measurement0 = arduinoReading.get();
+    float measurement1 = accelerometerReading.get();
 
-      break;
-    }
-    case 1: // Read accelerometer data
-    {
+    // Delta time : time since last prediction
+    float dt = (millis() - timer) / 1000.f;
+    timer = millis();
 
-      break;
-    }
-    case 2: // Read slider data
-    {
+    // Kalman filter steps ( TODO: need to add in accelerometer readings)
+    KF1.predict(dt);
+    int x = KF1.get();
+    KF1.correct(measurement1);
+    vTaskDelay(100); // Task period
+  }
+}
 
-      break;
-    }
-    case 3: // Read Arduino data
-    {
+void KF2Task(void *p_params)
+{
+  // Kalman filter setup
+  KF2.init(2);
+  KF2.setProcessNoise(0.1, 0.01);
+  KF2.setMeasurementNoise(0.1);
 
-      break;
-    }
-    case 4: // Calculate Kalman filter
-    {
+  while (true)
+  {
+    float measurement0 = arduinoReading.get();
+    float measurement1 = accelerometerReading.get();
 
-      break;
-    }
-    case 5: // Calculate MMAKF
-    {
+    // Delta time : time since last prediction
+    float dt = (millis() - timer) / 1000.f;
+    timer = millis();
 
-      break;
-    }
-    case 6: // Send data to OLED
-    {
+    // Kalman filter steps ( TODO: need to add in accelerometer readings)
+    KF2.predict(dt);
+    int x = KF3.get();
+    KF2.correct(measurement1);
+    vTaskDelay(100); // Task period
+  }
+}
 
-      break;
-    }
-    }
+void KF3Task(void *p_params)
+{
+  // Kalman filter setup
+  KF3.init(2);
+  KF3.setProcessNoise(0.1, 0.01);
+  KF3.setMeasurementNoise(0.1);
+
+  while (true)
+  {
+    float measurement0 = arduinoReading.get();
+    float measurement1 = accelerometerReading.get();
+
+    // Delta time : time since last prediction
+    float dt = (millis() - timer) / 1000.f;
+    timer = millis();
+
+    // Kalman filter steps ( TODO: need to add in accelerometer readings)
+    KF3.predict(dt);
+    int x = KF3.get();
+    KF3.correct(measurement1);
+    vTaskDelay(100); // Task period
+  }
+}
+void MMAETask(void *p_params)
+{
+  while (true)
+  {
+    // Compares each KF to actual measurement and weights them based on their error
+
+    // Calculate errors
+    float KF1Error = abs(KF1MotorPosition.get() - actualMotorPosition.get());
+    float KF2Error = abs(KF2MotorPosition.get() - actualMotorPosition.get());
+    float KF3Error = abs(KF3MotorPosition.get() - actualMotorPosition.get());
+
+    float totalError = KF1Error + KF2Error + KF3Error;
+
+    // Calculate weights
+    float KF1Weight = KF1Error / totalError;
+    float KF2Weight = KF2Error / totalError;
+    float KF3Weight = KF3Error / totalError;
+
+    // Calculate MMAE output
+    float MMAEOutput = (KF1MotorPosition.get() * KF1Weight) + (KF2MotorPosition.get() * KF2Weight) + (KF3MotorPosition.get() * KF3Weight);
+    MMAEMotorPosition.put(MMAEOutput);
+
     vTaskDelay(100); // Task period
   }
 }
@@ -246,7 +316,10 @@ void setup()
   xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
   xTaskCreate(arduinoTask, "Arduino Communication Task", 4096, NULL, 3, NULL);
   xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 3, NULL);
-  xTaskCreate(kalmanFilterTask, "Kalman Task", 10000, NULL, 3, NULL);
+  xTaskCreate(KF1Task, "KF1 Task", 10000, NULL, 3, NULL);
+  xTaskCreate(KF2Task, "KF2 Task", 10000, NULL, 3, NULL);
+  xTaskCreate(KF3Task, "KF3 Task", 10000, NULL, 3, NULL);
+  xTaskCreate(MMAETask, "MMAE Task", 10000, NULL, 3, NULL);
 }
 
 /**

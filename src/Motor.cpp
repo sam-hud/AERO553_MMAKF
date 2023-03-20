@@ -26,7 +26,7 @@ Motor::Motor(uint8_t PIN_1, uint8_t PIN_2)
  *           signal and setting one motor pin to high
  *  @params PWM The motor speed (0=Off; 255=100%)
  */
-void Motor::SetSpeed(uint16_t PWM)
+void Motor::setSpeed(uint16_t PWM)
 {
   analogWrite(Motor::PIN_1, PWM);
   digitalWrite(Motor::PIN_2, HIGH);
