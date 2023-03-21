@@ -35,7 +35,7 @@
 .pio/build/project.checksum
 .pio/libdeps/esp32dev/Arduino_JSON/
 .pio/libdeps/esp32dev/integrity.dat
-.pio/libdeps/esp32dev/ME507-Support/
+# .pio/libdeps/esp32dev/ME507-Support/
 .pio/libdeps/esp32dev/PrintStream/
 .vscode/c_cpp_properties.json
 .vscode/extensions.json

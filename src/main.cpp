@@ -117,6 +117,7 @@ void ssControllerTask(void *p_params)
   // ssController.L = {10.0347, 0.3480, 0.0065};
   ssController.initialise();
   float motor_pos = 0.0;
+  float desired_motor_pos = 0.0;
   uint8_t dt = 100;
   float gain = 0.0;
   while (true)
