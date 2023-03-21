@@ -52,7 +52,9 @@ Share<float> MMAEMotorPosition("MMAE Motor Position");
 Share<float> arduinoReading("Arduino Reading");
 Share<float> accelerometerReading("Accelerometer Reading");
 Share<int16_t> encPos("Encoder position");
-Share<float> zeroPosition("Zero Position");
+Share<unsigned long> rightTime("Right Acoustic Time");
+Share<unsigned long> leftTime("Left Acoustic Time");
+Share<float> acousticPosition("Acoustic Position");
 
 // Create each motor driver object
 Motor motor(PWM_PIN, DIR_PIN, BRK_PIN);
@@ -70,6 +72,16 @@ MotorPositionModel model(0.0000011502, 0.01, 0.4982, 4.8, 0.05);
 StateSpaceController<3, 1> ssController(model);
 Matrix<3> y;
 const float dt = 0.01;
+
+void rightInt()
+{
+  rightTime.put(micros());
+}
+
+void leftInt()
+{
+  leftTime.put(micros());
+}
 
 //********************************************************************************
 // Task declarations
@@ -93,7 +105,6 @@ void motorTask(void *p_params)
     vTaskDelay(10); // Task period
   }
 }
-
 //********************************************************************************
 // Encoder Task
 void encoderTask(void *p_params)
@@ -109,7 +120,6 @@ void encoderTask(void *p_params)
     vTaskDelay(25); // Task period
   }
 }
-
 //********************************************************************************
 // Motor positioner task
 void ssControllerTask(void *p_params)
@@ -121,9 +131,6 @@ void ssControllerTask(void *p_params)
   float desired_motor_pos = 0.0;
   uint8_t dt = 50;
   float gain = 0.0;
-  // TickType_t xLastWakeTime;
-  // const TickType_t xFrequency = dt / portTICK_PERIOD_MS;
-  // xLastWakeTime = xTaskGetTickCount();
   while (true)
   {
     desired_motor_pos = sliderPosition.get();
@@ -138,7 +145,6 @@ void ssControllerTask(void *p_params)
     // vTaskDelayUntil(&xLastWakeTime, xFrequency);
   }
 }
-
 //********************************************************************************
 // OLED display task
 void displayTask(void *p_params)
@@ -204,7 +210,7 @@ void controlInputTask(void *p_params)
   {
     // TODO: read slider input and set shared variable
     int16_t sliderValue = analogRead(SLIDER_PIN);
-    sliderValue = sliderValue * 100 / 3500 + 20;
+    sliderValue = sliderValue * 100 / 3500 + 10;
     sliderPosition.put(sliderValue);
     // float mspeed = sliderValue;
     // motorSpeed.put(mspeed * 4);
@@ -230,7 +236,6 @@ void accelerometerTask(void *p_params)
     vTaskDelay(100); // Task period
   }
 }
-
 //********************************************************************************
 // Limit switch task
 void limitSwitchTask(void *p_params)
@@ -242,7 +247,6 @@ void limitSwitchTask(void *p_params)
     {
       limitSwitchPressed.put(true);
       encoder.setCount(0);
-      // zeroPosition.put(actualMotorPosition.get());
     }
     else
     {
@@ -251,7 +255,48 @@ void limitSwitchTask(void *p_params)
     vTaskDelay(100); // Task period
   }
 }
+//********************************************************************************
+// Acoustic positioning task
+void acousticTask(void *p_params)
+{
+  float spacing = 65; // spacing between receivers, mm
+  float zero_dist = 381; // spacing between transmitter and receiver in straight line, mm
+  float x_r = 0.0;
+  float x_l = 0.0;
+  float x = 0.0;
+  float d_r = 0.0;
+  float d_l = 0.0;
+  float c = 145;
+  float m = 0.684;
+  unsigned long startTime = 0;
+  attachInterrupt(REC_R, rightInt, FALLING);
+  attachInterrupt(REC_L, leftInt, FALLING);
+  while (true)
+  {
+    digitalWrite(TRANS, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRANS, LOW);
+    startTime = micros();
+    vTaskDelay(100);
 
+    d_r = float((rightTime.get() - startTime) * 0.343 * m + c);
+    d_l = float((leftTime.get() - startTime) * 0.343 * m + c);
+    x_r = sqrt(abs(d_r*d_r - zero_dist*zero_dist)) + spacing/2;
+    x_l = sqrt(abs(d_l*d_l - zero_dist*zero_dist)) - spacing/2;
+    x = (x_r + x_l)/2;
+    acousticPosition.put(x);
+    Serial.println(x);
+
+    x_r = 0.0;
+    x_l = 0.0;
+    x = 0.0;
+    d_r = 0.0;
+    d_l = 0.0;
+    rightTime.put(0);
+    leftTime.put(0);
+    vTaskDelay(100);
+  }
+}
 //********************************************************************************
 // Kalman filter tasks
 void KF1Task(void *p_params)
@@ -278,7 +323,6 @@ void KF1Task(void *p_params)
     vTaskDelay(100); // Task period
   }
 }
-
 void KF2Task(void *p_params)
 {
   // Kalman filter setup
@@ -303,7 +347,6 @@ void KF2Task(void *p_params)
     vTaskDelay(100); // Task period
   }
 }
-
 void KF3Task(void *p_params)
 {
   // Kalman filter setup
@@ -410,6 +453,7 @@ void setup()
   // xTaskCreate(KF2Task, "KF2 Task", 10000, NULL, 3, NULL);
   // xTaskCreate(KF3Task, "KF3 Task", 10000, NULL, 3, NULL);
   // xTaskCreate(MMAETask, "MMAE Task", 10000, NULL, 3, NULL);
+  xTaskCreate(acousticTask, "Acoustic Task", 4096, NULL, 2, NULL);
 }
 
 /**
