@@ -157,16 +157,33 @@ void controlInputTask(void *p_params)
 }
 //********************************************************************************
 // Accelerometer reading task
-void accelerometerTask(void *p_params)
+// void accelerometerTask(void *p_params)
+// {
+//   uint8_t accelState = 0; // Set start case to 0
+//   while (true)
+//   {
+//     // TODO: read accelerometer and set shared variable
+//     float accelValue = analogRead(ACCEL_PIN);
+//     accelerometerReading.put(accelValue);
+//     vTaskDelay(100); // Task period
+//   }
+// }
+
+/** @brief   Task gets data from IMU 
+ *  @details This task calls the IMU_get_data() function to print the 
+ *           current IMU readings
+ *  @param   p_params A pointer to parameters passed to this task. This 
+ *           pointer is ignored; it should be set to @c NULL in the 
+ *           call to @c xTaskCreate() which starts this task
+ */
+void task_IMU (void* p_params)
 {
-  uint8_t accelState = 0; // Set start case to 0
-  while (true)
-  {
-    // TODO: read accelerometer and set shared variable
-    float accelValue = analogRead(ACCEL_PIN);
-    accelerometerReading.put(accelValue);
-    vTaskDelay(100); // Task period
-  }
+    Serial << "Creating IMU"<< endl;
+    while (true)
+    {
+    IMU_get_data();            // runs the IMU_Get_Data function to retrieve accel data from IMU
+    vTaskDelay(200);
+    }
 }
 
 // Limit switch task
@@ -335,10 +352,12 @@ void setup()
   // xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
   // xTaskCreate(arduinoTask, "Arduino Communication Task", 4096, NULL, 3, NULL);
   xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 3, NULL);
+   xTaskCreate (task_IMU, "IMU", 4096, NULL, 3, NULL);
   // xTaskCreate(KF1Task, "KF1 Task", 10000, NULL, 3, NULL);
   // xTaskCreate(KF2Task, "KF2 Task", 10000, NULL, 3, NULL);
   // xTaskCreate(KF3Task, "KF3 Task", 10000, NULL, 3, NULL);
   // xTaskCreate(MMAETask, "MMAE Task", 10000, NULL, 3, NULL);
+   IMU_setup();
 }
 
 /**
