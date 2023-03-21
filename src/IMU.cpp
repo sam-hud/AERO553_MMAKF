@@ -3,8 +3,9 @@
  *         most content pulled from https://mschoeffler.com/2017/10/05/tutorial-how-to-use-the-gy-521-module-mpu-6050-breakout-board-with-the-arduino-uno/
  *  @author Michael Schoeffler 
  *  @author Nolan Clapp
+ *  @author Joe Lyons
  *  @date 2017 Original Schoeffler 
- *  @date 2022-11-01 Pulled code into .cpp and .h for easier use Clapp
+ *  @date 2022-11-01 Pulled code into .cpp and .h for easier use Clapp/Lyons
  *  
  */
 
@@ -19,8 +20,8 @@
 const int MPU_ADDR = 0x68; // I2C address of the MPU-6050. If AD0 pin is set to HIGH, the I2C address will be 0x69.
 
 int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
-int16_t gyro_x, gyro_y, gyro_z; // variables for gyro raw data
-int16_t temperature; // variables for temperature data
+// int16_t gyro_x, gyro_y, gyro_z; // variables for gyro raw data
+// int16_t temperature; // variables for temperature data
 
 char tmp_str[7]; // temporary variable used in convert function
 
@@ -56,14 +57,14 @@ void IMU_get_data() {
 
   temperature = Wire.read()<<8 | Wire.read(); // reading registers: 0x41 (TEMP_OUT_H) and 0x42 (TEMP_OUT_L)
 
-  gyro_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
-  gyro_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
-  gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
+  // gyro_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
+  // gyro_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
+  // gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
   
-  float pitch = 180 * atan (accelerometer_x/sqrt(accelerometer_y*accelerometer_y + accelerometer_z*accelerometer_z))/M_PI;
-  float roll = 180 * atan (accelerometer_y/sqrt(accelerometer_x*accelerometer_x + accelerometer_z*accelerometer_z))/M_PI;
+  // float pitch = 180 * atan (accelerometer_x/sqrt(accelerometer_y*accelerometer_y + accelerometer_z*accelerometer_z))/M_PI;
+  // float roll = 180 * atan (accelerometer_y/sqrt(accelerometer_x*accelerometer_x + accelerometer_z*accelerometer_z))/M_PI;
   
-  float yaw = 180 * atan (accelerometer_z/sqrt(accelerometer_x*accelerometer_x + accelerometer_z*accelerometer_z))/M_PI;
+  // float yaw = 180 * atan (accelerometer_z/sqrt(accelerometer_x*accelerometer_x + accelerometer_z*accelerometer_z))/M_PI;
  
  //Serial<< setprecision(3) <<"[R: "<< roll << "  P: "<< pitch<< "  Y: "<< yaw<<"]"<<endl;
   // print out data
@@ -73,8 +74,8 @@ void IMU_get_data() {
 
   // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
 
-  Serial << "  Gyro ["<< "X="<<convert_int16_to_str(gyro_x)<< "  "<<
-                         "Y="<<convert_int16_to_str(gyro_y)<< "  "<<
-                         "Z="<<convert_int16_to_str(gyro_z)<< " ]"<< endl;
+  // Serial << "  Gyro ["<< "X="<<convert_int16_to_str(gyro_x)<< "  "<<
+  //                        "Y="<<convert_int16_to_str(gyro_y)<< "  "<<
+  //                        "Z="<<convert_int16_to_str(gyro_z)<< " ]"<< endl;
 
 }

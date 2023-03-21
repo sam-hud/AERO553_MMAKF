@@ -1,9 +1,10 @@
 /** @file IMU.h
- *  @brief Headder file for IMU
+ *  @brief Header file for IMU
     @author Clapp
+    @author Lyons
     @author Schoeffler
  *  @date 2017 Original Schoeffler 
- *  @date 2022-11-01 Pulled code into .cpp and .h for easier use Clapp
+ *  @date 2022-11-01 Pulled code into .cpp and .h for easier use Clapp/Lyons
  */
 
 #ifndef IMU_h
