@@ -39,9 +39,9 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
 /* Define Shares*/
-Queue<float> motorSpeed(1, "Motor Speed");
+Share<float> motorSpeed("Motor Speed");
 Share<bool> limitSwitchPressed("Limit Switch Pressed");
-Share<uint16_t> sliderPosition("Slider Position");
+Share<int16_t> sliderPosition("Slider Position");
 Share<float> actualMotorPosition("Actual Motor Position");
 Share<float> KF1MotorPosition("KF1 Motor Position");
 Share<float> KF2MotorPosition("KF2 Motor Position");
@@ -72,7 +72,7 @@ void motorTask(void *p_params)
 {
   while (true)
   {
-    // motor.setSpeed(motorSpeed.get());
+    motor.setSpeed(motorSpeed.get());
     vTaskDelay(50); // Task period
   }
 }
@@ -86,7 +86,8 @@ void encoderTask(void *p_params)
   {
     temp_pos = encoder.getCount();     // measure position
     temp_pos = temp_pos * 8 / 1632.67; // convert to mm, linear
-    // actualMotorPosition.put(temp_pos);
+    actualMotorPosition.put(temp_pos);
+    Serial.print("Encoder position: ");
     Serial.println(temp_pos);
     vTaskDelay(50); // Task period
   }
@@ -144,11 +145,14 @@ void controlInputTask(void *p_params)
   while (true)
   {
     // TODO: read slider input and set shared variable
-    uint16_t sliderValue = analogRead(SLIDER_PIN);
-    sliderValue = sliderValue * 150 / 3250;
+    int16_t sliderValue = analogRead(SLIDER_PIN);
+    sliderValue = sliderValue * 150 / 3250 - 75;
     sliderPosition.put(sliderValue);
-    // Serial.println(sliderValue);
-    vTaskDelay(100); // Task period
+    float mspeed = sliderValue;
+    motorSpeed.put(mspeed*2);
+    Serial.print("Slider Value:");
+    Serial.println(sliderValue);
+    vTaskDelay(50); // Task period
   }
 }
 //********************************************************************************
@@ -311,27 +315,24 @@ void setup()
   encoder.attachFullQuad(ENA_PIN, ENB_PIN);
   encoder.setCount(0);
 
-  // Reset OLED
-  pinMode(OLED_RST, OUTPUT);
-  digitalWrite(OLED_RST, LOW);
-  delay(20);
-  digitalWrite(OLED_RST, HIGH);
+  // Initialize shared variables
+  motorSpeed.put(0);
 
   // Initialize OLED
-  Wire.begin(OLED_SDA, OLED_SCL);
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false))
-  {
-    Serial.println(F("OLED not found"));
-    while (1)
-      ;
-  }
+  // Wire.begin(OLED_SDA, OLED_SCL);
+  // if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false))
+  // {
+  //   Serial.println(F("OLED not found"));
+  //   while (1)
+  //     ;
+  // }
 
   // Start FreeRTOS tasks
   // xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
   xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 3, NULL);
   // xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
-  // xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
-  xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
+  xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
+  // xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
   // xTaskCreate(arduinoTask, "Arduino Communication Task", 4096, NULL, 3, NULL);
   xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 3, NULL);
   // xTaskCreate(KF1Task, "KF1 Task", 10000, NULL, 3, NULL);

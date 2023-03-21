@@ -33,10 +33,12 @@ public:
      * @param BRK_PIN motor BRK
      */
     Motor(uint8_t PWM_PIN, uint8_t DIR_PIN, uint8_t BRK_PIN);
-    /** @brief Method to set motor speed
-     *   @params PWM to set the motor speed
+    /**
+     * @brief Set the Speed object
+     *
+     * @param signedSpeed speed to set motor to
      */
-    void setSpeed(int16_t SignedSpeed);
+    void setSpeed(int16_t signedSpeed);
 };
 
 #endif

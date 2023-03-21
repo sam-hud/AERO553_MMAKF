@@ -27,26 +27,26 @@ Motor::Motor(uint8_t PWM_PIN, uint8_t DIR_PIN, uint8_t BRK_PIN)
  *           signal and setting one motor pin to high
  *  @params PWM The motor speed (0=Off; 255=100% FWD, -255=100% REV)
  */
-void Motor::setSpeed(int16_t SignedSpeed)
+void Motor::setSpeed(int16_t signedSpeed)
 {
   digitalWrite(Motor::BRK_PIN, 1);
 
-  if (SignedSpeed >= 0)
+  if (signedSpeed >= 0)
   {
-    if (SignedSpeed > 255)
+    if (signedSpeed > 255)
     {
-      SignedSpeed = 255;
+      signedSpeed = 255;
     }
     digitalWrite(Motor::DIR_PIN, 1);
-    analogWrite(Motor::PWM_PIN, SignedSpeed);
+    analogWrite(Motor::PWM_PIN, signedSpeed);
   }
   else
   {
-    if (SignedSpeed < -255)
+    if (signedSpeed < -255)
     {
-      SignedSpeed = -255;
+      signedSpeed = -255;
     }
     digitalWrite(Motor::DIR_PIN, 0);
-    analogWrite(Motor::PWM_PIN, -SignedSpeed);
+    analogWrite(Motor::PWM_PIN, -signedSpeed);
   }
 }
