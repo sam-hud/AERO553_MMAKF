@@ -36,7 +36,7 @@ public:
     /** @brief Method to set motor speed
      *   @params PWM to set the motor speed
      */
-    void setSpeed(uint16_t SignedSpeed);
+    void setSpeed(int16_t SignedSpeed);
 };
 
 #endif
