@@ -70,22 +70,27 @@ KalmanFilter KF3;
 // Motor Task
 void motorTask(void *p_params)
 {
-  float temp_pos = 0.0;
   while (true)
   {
-    temp_pos = encoder.getCount();            // measure position
-    temp_pos = temp_pos*8/1632.67;      // convert to mm, linear
-    actualMotorPosition.put(temp_pos);
-    Serial.println(temp_pos);
+    // motor.setSpeed(motorSpeed.get());
     vTaskDelay(50); // Task period
   }
 }
 
+//********************************************************************************
+// Encoder Task
 void encoderTask(void *p_params)
 {
-  
+  float temp_pos = 0.0;
+  while (true)
+  {
+    temp_pos = encoder.getCount();     // measure position
+    temp_pos = temp_pos * 8 / 1632.67; // convert to mm, linear
+    // actualMotorPosition.put(temp_pos);
+    Serial.println(temp_pos);
+    vTaskDelay(50); // Task period
+  }
 }
-
 
 //********************************************************************************
 // OLED display task
@@ -142,7 +147,7 @@ void controlInputTask(void *p_params)
     uint16_t sliderValue = analogRead(SLIDER_PIN);
     sliderValue = sliderValue * 150 / 3250;
     sliderPosition.put(sliderValue);
-    //Serial.println(sliderValue);
+    // Serial.println(sliderValue);
     vTaskDelay(100); // Task period
   }
 }
@@ -159,21 +164,7 @@ void accelerometerTask(void *p_params)
     vTaskDelay(100); // Task period
   }
 }
-//********************************************************************************
-// Arduino communication task
-// void arduinoTask(void *p_params)
-// {
-//   while (true)
-//   {
-//     while (Arduino.available())
-//     {
-//       String arduinoRead = Arduino.readString();
-//       arduinoReading.put(arduinoRead.toFloat());
-//       // Task period controlled by Arduino reading
-//     }
-//   }
-// }
-//********************************************************************************
+
 // Limit switch task
 void limitSwitchTask(void *p_params)
 {
@@ -315,10 +306,10 @@ void setup()
   pinMode(ENA_PIN, INPUT);
   pinMode(ENB_PIN, INPUT);
   pinMode(LIM_PIN, INPUT);
-  pinMode(SLIDER_PIN, INPUT);	
-  //ESP32Encoder::useInternalWeakPullResistors=UP;
+  pinMode(SLIDER_PIN, INPUT);
+  // ESP32Encoder::useInternalWeakPullResistors=UP;
   encoder.attachFullQuad(ENA_PIN, ENB_PIN);
-  encoder.setCount (0);
+  encoder.setCount(0);
 
   // Reset OLED
   pinMode(OLED_RST, OUTPUT);
@@ -336,10 +327,10 @@ void setup()
   }
 
   // Start FreeRTOS tasks
-  //xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
+  // xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
   xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 3, NULL);
-  //xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
-  xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
+  // xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
+  // xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
   xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
   // xTaskCreate(arduinoTask, "Arduino Communication Task", 4096, NULL, 3, NULL);
   xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 3, NULL);
