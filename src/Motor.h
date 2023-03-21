@@ -15,24 +15,29 @@
 class Motor
 {
 protected:
-    /** @brief Variable for Pin1
+    /** @brief Variable for PWM pin
      */
-    uint8_t PIN_1; ///< Motor Pin1
-    /** @brief Variable for Pin2
+    uint8_t PWM_PIN; ///< Motor PWM/Speed pin
+    /** @brief Variable for DIR pin
      */
-    uint8_t PIN_2; ///< Motor Pin2
+    uint8_t DIR_PIN; ///< Motor DIR pin
+    /** @brief Variable for Brake pin
+     */
+    uint8_t BRK_PIN; ///< Motor BRK pin
 public:
     /**
      * @brief Construct a new Motor object
      *
-     * @param PIN_1 motor pin 1
-     * @param PIN_2 motor pin 2
+     * @param PWM_PIN motor PWM
+     * @param DIR_PIN motor DIR
+     * @param BRK_PIN motor BRK
      */
-    Motor(uint8_t PIN_1, uint8_t PIN_2);
+    Motor(uint8_t PWM_PIN, uint8_t DIR_PIN, uint8_t BRK_PIN);
     /** @brief Method to set motor speed
      *   @params PWM to set the motor speed
      */
-    void setSpeed(uint16_t PWM);
+    void setSpeed(uint16_t SignedSpeed);
+
 };
 
 #endif

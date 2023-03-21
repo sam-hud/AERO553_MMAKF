@@ -13,20 +13,36 @@
 
 /** @brief   Constructor which creates a motor object.
  */
-Motor::Motor(uint8_t PIN_1, uint8_t PIN_2)
+Motor::Motor(uint8_t PWM_PIN, uint8_t DIR_PIN, uint8_t BRK_PIN)
 {
-  this->PIN_1 = PIN_1;
-  this->PIN_2 = PIN_2;
-  pinMode(PIN_1, INPUT);
-  pinMode(PIN_2, INPUT);
+  this->PWM_PIN = PWM_PIN;
+  this->DIR_PIN = DIR_PIN;
+  this->BRK_PIN = BRK_PIN;
+  pinMode(PWM_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(BRK_PIN, OUTPUT);
 }
-/** @brief   Method sets the motor speed (0-255)
+/** @brief   Method sets the motor speed (-255 to +255)
  *  @details This method sets the motor speed by passing in a PWM
  *           signal and setting one motor pin to high
- *  @params PWM The motor speed (0=Off; 255=100%)
+ *  @params PWM The motor speed (0=Off; 255=100% FWD, -255=100% REV)
  */
-void Motor::setSpeed(uint16_t PWM)
+void Motor::setSpeed(int16_t SignedSpeed)
 {
-  analogWrite(PIN_1, PWM);
-  digitalWrite(PIN_2, HIGH);
+  digitalWrite(Motor::BRK_PIN, 1);
+
+  if (SignedSpeed >= 0){
+    if (SignedSpeed > 255){
+      SignedSpeed = 255;
+    }
+    digitalWrite(Motor::DIR_PIN, 1);
+    analogWrite(Motor::PWM_PIN, SignedSpeed);
+  } 
+  else{
+    if (SignedSpeed < -255){
+      SignedSpeed = -255;
+    }
+    digitalWrite(Motor::DIR_PIN, 0);
+    analogWrite(Motor::PWM_PIN, -SignedSpeed);
+  }
 }
