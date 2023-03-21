@@ -121,6 +121,7 @@ void displayTask(void *p_params)
     // display.print(MMAEMotorPosition.get());
 
     display.display();
+    Serial.println("Display cycle");
     vTaskDelay(10); // Task period
   }
 }
@@ -132,7 +133,7 @@ void controlInputTask(void *p_params)
   {
     // TODO: read slider input and set shared variable
     float sliderValue = (analogRead(SLIDER_PIN) / 3200.0F) * 150;
-    Serial.println(sliderValue);
+    // Serial.println(sliderValue);
     sliderPosition.put(sliderValue);
     vTaskDelay(10); // Task period
   }
