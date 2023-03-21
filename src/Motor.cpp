@@ -10,7 +10,6 @@
 #include <Arduino.h>
 #include <PrintStream.h>
 #include "Motor.h"
-#include "Wire.h" // This library allows you to communicate with I2C devices.
 
 /** @brief   Constructor which creates a motor object.
  */
@@ -28,6 +27,6 @@ Motor::Motor(uint8_t PIN_1, uint8_t PIN_2)
  */
 void Motor::setSpeed(uint16_t PWM)
 {
-  analogWrite(Motor::PIN_1, PWM);
-  digitalWrite(Motor::PIN_2, HIGH);
+  analogWrite(PIN_1, PWM);
+  digitalWrite(PIN_2, HIGH);
 }
