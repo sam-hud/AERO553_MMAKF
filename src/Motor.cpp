@@ -31,15 +31,19 @@ void Motor::setSpeed(int16_t SignedSpeed)
 {
   digitalWrite(Motor::BRK_PIN, 1);
 
-  if (SignedSpeed >= 0){
-    if (SignedSpeed > 255){
+  if (SignedSpeed >= 0)
+  {
+    if (SignedSpeed > 255)
+    {
       SignedSpeed = 255;
     }
     digitalWrite(Motor::DIR_PIN, 1);
     analogWrite(Motor::PWM_PIN, SignedSpeed);
-  } 
-  else{
-    if (SignedSpeed < -255){
+  }
+  else
+  {
+    if (SignedSpeed < -255)
+    {
       SignedSpeed = -255;
     }
     digitalWrite(Motor::DIR_PIN, 0);
