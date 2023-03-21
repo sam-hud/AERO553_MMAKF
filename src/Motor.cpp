@@ -8,8 +8,8 @@
  */
 
 #include <Arduino.h>
-#include <PrintStream.h>
 #include "Motor.h"
+// #include <PrintStream.h>
 
 /** @brief   Constructor which creates a motor object.
  */

@@ -8,6 +8,8 @@
 #include "taskshare.h"        // Header for inter-task shared data
 #include "taskqueue.h"        // Header for inter-task data queues
 #include <ESP32Encoder.h>
+#include "IMU.h"
+#include <StateSpaceControl.h>
 
 // TODO: Check pins
 
@@ -50,6 +52,7 @@ Share<float> MMAEMotorPosition("MMAE Motor Position");
 Share<float> arduinoReading("Arduino Reading");
 Share<float> accelerometerReading("Accelerometer Reading");
 Share<int16_t> encPos("Encoder position");
+Share<float> zeroPosition("Zero Position");
 
 // Create each motor driver object
 Motor motor(PWM_PIN, DIR_PIN, BRK_PIN);
@@ -62,6 +65,12 @@ KalmanFilter KF1;
 KalmanFilter KF2;
 KalmanFilter KF3;
 
+// Create state-space controller
+MotorPositionModel model(0.0000011502, 0.01, 0.4982, 4.8, 0.05);
+StateSpaceController<3, 1> ssController(model);
+Matrix<3> y;
+const float dt = 0.01;
+
 //********************************************************************************
 // Task declarations
 //********************************************************************************
@@ -72,8 +81,15 @@ void motorTask(void *p_params)
 {
   while (true)
   {
-    motor.setSpeed(motorSpeed.get());
-    vTaskDelay(50); // Task period
+    if (limitSwitchPressed.get() == false)
+    {
+      motor.setSpeed(motorSpeed.get());
+    }
+    else
+    {
+      motor.setSpeed(0); // Stop motor
+    }
+    vTaskDelay(10); // Task period
   }
 }
 
@@ -94,13 +110,35 @@ void encoderTask(void *p_params)
 }
 
 //********************************************************************************
+// Motor positioner task
+void ssControllerTask(void *p_params)
+{
+  ssController.K = {22.3607, 0.00039252, 1.9114};
+  // ssController.L = {10.0347, 0.3480, 0.0065};
+  ssController.initialise();
+  float motor_pos = 0.0;
+  uint8_t dt = 100;
+  float gain = 0.0;
+  while (true)
+  {
+    ssController.r(0) = 0;
+    motor_pos = actualMotorPosition.get();
+    ssController.update(motor_pos, dt);
+    vTaskDelay(dt);
+    gain = ssController.u(0);
+    gain = gain * 255 / 12;
+    motorSpeed.put(gain);
+    Serial.println(gain);
+  }
+}
+
+//********************************************************************************
 // OLED display task
 void displayTask(void *p_params)
 {
-  uint8_t displayState = 0; // Set start case to 0
   while (true)
   {
-    // TODO: set task period based on incoming queue data
+    /*
     display.clearDisplay();
     display.setTextSize(2);
     display.setTextColor(WHITE);
@@ -135,6 +173,19 @@ void displayTask(void *p_params)
     display.print(MMAEMotorPosition.get());
 
     display.display();
+    */
+    /* Serial monitor output */
+    Serial.println("Actual,KF1,KF2,KF3,MMAEKF");
+    Serial.print(actualMotorPosition.get());
+    Serial.print(",");
+    Serial.print(KF1MotorPosition.get());
+    Serial.print(",");
+    Serial.print(KF2MotorPosition.get());
+    Serial.print(",");
+    Serial.print(KF3MotorPosition.get());
+    Serial.print(",");
+    Serial.println(MMAEMotorPosition.get());
+
     vTaskDelay(100); // Task period
   }
 }
@@ -149,7 +200,7 @@ void controlInputTask(void *p_params)
     sliderValue = sliderValue * 150 / 3250 - 75;
     sliderPosition.put(sliderValue);
     float mspeed = sliderValue;
-    motorSpeed.put(mspeed*2);
+    motorSpeed.put(mspeed * 4);
     Serial.print("Slider Value:");
     Serial.println(sliderValue);
     vTaskDelay(50); // Task period
@@ -157,35 +208,23 @@ void controlInputTask(void *p_params)
 }
 //********************************************************************************
 // Accelerometer reading task
-// void accelerometerTask(void *p_params)
-// {
-//   uint8_t accelState = 0; // Set start case to 0
-//   while (true)
-//   {
-//     // TODO: read accelerometer and set shared variable
-//     float accelValue = analogRead(ACCEL_PIN);
-//     accelerometerReading.put(accelValue);
-//     vTaskDelay(100); // Task period
-//   }
-// }
-
-/** @brief   Task gets data from IMU 
- *  @details This task calls the IMU_get_data() function to print the 
- *           current IMU readings
- *  @param   p_params A pointer to parameters passed to this task. This 
- *           pointer is ignored; it should be set to @c NULL in the 
- *           call to @c xTaskCreate() which starts this task
- */
-void task_IMU (void* p_params)
+void accelerometerTask(void *p_params)
 {
-    Serial << "Creating IMU"<< endl;
-    while (true)
-    {
-    IMU_get_data();            // runs the IMU_Get_Data function to retrieve accel data from IMU
-    vTaskDelay(200);
-    }
+  uint8_t accelState = 0; // Set start case to 0
+  while (true)
+  {
+    // accelerometerReading.put(getIMU_y);
+    // Serial.print(",IMU x: ");
+    // Serial.print(getIMU_x());
+    Serial.print(",IMU y:");
+    Serial.print(getIMU_y());
+    // Serial.println(",IMU z:");
+    // Serial.print(getIMU_z());
+    vTaskDelay(100); // Task period
+  }
 }
 
+//********************************************************************************
 // Limit switch task
 void limitSwitchTask(void *p_params)
 {
@@ -195,6 +234,7 @@ void limitSwitchTask(void *p_params)
     if (limitSwitchStatus == HIGH) // TODO: check if this is correct
     {
       limitSwitchPressed.put(true);
+      zeroPosition.put(actualMotorPosition.get());
     }
     else
     {
@@ -335,6 +375,9 @@ void setup()
   // Initialize shared variables
   motorSpeed.put(0);
 
+  // Setup IMU
+  setupIMU();
+
   // Initialize OLED
   // Wire.begin(OLED_SDA, OLED_SCL);
   // if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false))
@@ -344,20 +387,20 @@ void setup()
   //     ;
   // }
 
-  // Start FreeRTOS tasks
+  /* Start FreeRTOS tasks */
   // xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
-  xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 3, NULL);
+  // xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 3, NULL);
   // xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
-  xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
-  // xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
+  // xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
+  xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
+  xTaskCreate(ssControllerTask, "State-Space Controller Task", 8192, NULL, 3, NULL);
   // xTaskCreate(arduinoTask, "Arduino Communication Task", 4096, NULL, 3, NULL);
   xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 3, NULL);
-   xTaskCreate (task_IMU, "IMU", 4096, NULL, 3, NULL);
+  // xTaskCreate(accelerometerTask, "IMU", 4096, NULL, 3, NULL);
   // xTaskCreate(KF1Task, "KF1 Task", 10000, NULL, 3, NULL);
   // xTaskCreate(KF2Task, "KF2 Task", 10000, NULL, 3, NULL);
   // xTaskCreate(KF3Task, "KF3 Task", 10000, NULL, 3, NULL);
   // xTaskCreate(MMAETask, "MMAE Task", 10000, NULL, 3, NULL);
-   IMU_setup();
 }
 
 /**

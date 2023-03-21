@@ -8,7 +8,7 @@
 #define Motor_h
 
 #include <Arduino.h>
-#include "PrintStream.h"
+// #include "PrintStream.h"
 
 /** @brief   Class which deals with motor interaction
  */
