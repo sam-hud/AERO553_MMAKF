@@ -1,12 +1,12 @@
 #include <Arduino.h>
-#include <Wire.h>             // This library allows you to communicate with I2C devices.
-#include <Adafruit_GFX.h>     // Core graphics library
-#include <Adafruit_SSD1306.h> // Hardware-specific library for SSD1306 displays
-#include <HardwareSerial.h>   // Serial communication
-#include <kalman.h>           // Kalman Filter library
-#include "Motor.h"            // Header for motor class
-#include "taskshare.h"        // Header for inter-task shared data
-#include "taskqueue.h"        // Header for inter-task data queues
+#include <Wire.h>                        // This library allows you to communicate with I2C devices.
+#include <Adafruit_GFX.h>                // Core graphics library
+#include <Adafruit_SSD1306.h>            // Hardware-specific library for SSD1306 displays
+#include <HardwareSerial.h>              // Serial communication
+#include <kalman.h>                      // Kalman Filter library
+#include "Motor.h"                       // Header for motor class
+#include "ME507-Support/src/taskshare.h" // Header for inter-task shared data
+#include "ME507-Support/src/taskqueue.h" // Header for inter-task data queues
 #include <ESP32Encoder.h>
 #include "IMU.h"
 #include <StateSpaceControl.h>
@@ -79,16 +79,17 @@ const float dt = 0.01;
 // Motor Task
 void motorTask(void *p_params)
 {
+  while (limitSwitchPressed.get() == false)
+  {
+    motor.setSpeed(-120);
+    vTaskDelay(100);
+  }
+  motor.setSpeed(150);
+  vTaskDelay(250);
+  motor.setSpeed(0);
   while (true)
   {
-    if (limitSwitchPressed.get() == false)
-    {
-      motor.setSpeed(motorSpeed.get());
-    }
-    else
-    {
-      motor.setSpeed(0); // Stop motor
-    }
+    motor.setSpeed(motorSpeed.get());
     vTaskDelay(10); // Task period
   }
 }
@@ -100,12 +101,12 @@ void encoderTask(void *p_params)
   float temp_pos = 0.0;
   while (true)
   {
-    temp_pos = encoder.getCount();     // measure position
-    temp_pos = temp_pos * 8 / 1632.67; // convert to mm, linear
+    temp_pos = encoder.getCount();                   // measure position
+    temp_pos = temp_pos * 8 * 100 / 12.59 / 1632.67; // convert to mm, linear
     actualMotorPosition.put(temp_pos);
-    Serial.print("Encoder position: ");
-    Serial.println(temp_pos);
-    vTaskDelay(50); // Task period
+    // Serial.print("Encoder position: ");
+    // Serial.println(temp_pos);
+    vTaskDelay(25); // Task period
   }
 }
 
@@ -114,22 +115,27 @@ void encoderTask(void *p_params)
 void ssControllerTask(void *p_params)
 {
   ssController.K = {22.3607, 0.00039252, 1.9114};
-  // ssController.L = {10.0347, 0.3480, 0.0065};
+  ssController.L = {10.0347, 0.3480, 0.0065};
   ssController.initialise();
-  float motor_pos = 0.0;
+  float actual_motor_pos = 0.0;
   float desired_motor_pos = 0.0;
-  uint8_t dt = 100;
+  uint8_t dt = 50;
   float gain = 0.0;
+  // TickType_t xLastWakeTime;
+  // const TickType_t xFrequency = dt / portTICK_PERIOD_MS;
+  // xLastWakeTime = xTaskGetTickCount();
   while (true)
   {
-    ssController.r(0) = 0;
-    motor_pos = actualMotorPosition.get();
-    ssController.update(motor_pos, dt);
-    vTaskDelay(dt);
+    desired_motor_pos = sliderPosition.get();
+    ssController.r(0) = desired_motor_pos;
+    actual_motor_pos = actualMotorPosition.get();
+    ssController.update(actual_motor_pos, (dt / 1000));
     gain = ssController.u(0);
-    gain = gain * 255 / 12;
+    gain = gain * 255 / 50 / 12;
     motorSpeed.put(gain);
     Serial.println(gain);
+    vTaskDelay(dt);
+    // vTaskDelayUntil(&xLastWakeTime, xFrequency);
   }
 }
 
@@ -198,13 +204,13 @@ void controlInputTask(void *p_params)
   {
     // TODO: read slider input and set shared variable
     int16_t sliderValue = analogRead(SLIDER_PIN);
-    sliderValue = sliderValue * 150 / 3250 - 75;
+    sliderValue = sliderValue * 100 / 3500 + 20;
     sliderPosition.put(sliderValue);
-    float mspeed = sliderValue;
-    motorSpeed.put(mspeed * 4);
-    Serial.print("Slider Value:");
-    Serial.println(sliderValue);
-    vTaskDelay(50); // Task period
+    // float mspeed = sliderValue;
+    // motorSpeed.put(mspeed * 4);
+    // Serial.print("Slider Value:");
+    // Serial.println(sliderValue);
+    vTaskDelay(100); // Task period
   }
 }
 //********************************************************************************
@@ -232,10 +238,11 @@ void limitSwitchTask(void *p_params)
   while (true)
   {
     bool limitSwitchStatus = digitalRead(LIM_PIN);
-    if (limitSwitchStatus == HIGH) // TODO: check if this is correct
+    if (limitSwitchStatus == LOW) // TODO: check if this is correct
     {
       limitSwitchPressed.put(true);
-      zeroPosition.put(actualMotorPosition.get());
+      encoder.setCount(0);
+      // zeroPosition.put(actualMotorPosition.get());
     }
     else
     {
@@ -367,7 +374,7 @@ void setup()
   pinMode(BRK_PIN, OUTPUT);
   pinMode(ENA_PIN, INPUT);
   pinMode(ENB_PIN, INPUT);
-  pinMode(LIM_PIN, INPUT);
+  pinMode(LIM_PIN, INPUT_PULLUP);
   pinMode(SLIDER_PIN, INPUT);
   // ESP32Encoder::useInternalWeakPullResistors=UP;
   encoder.attachFullQuad(ENA_PIN, ENB_PIN);
@@ -375,6 +382,7 @@ void setup()
 
   // Initialize shared variables
   motorSpeed.put(0);
+  limitSwitchPressed.put(false);
 
   // Setup IMU
   setupIMU();
@@ -390,13 +398,13 @@ void setup()
 
   /* Start FreeRTOS tasks */
   // xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
-  // xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 3, NULL);
+  xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 2, NULL);
   // xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
-  // xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
+  xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 2, NULL);
+  xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
   xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
-  xTaskCreate(ssControllerTask, "State-Space Controller Task", 8192, NULL, 3, NULL);
+  xTaskCreate(ssControllerTask, "State-Space Controller Task", 8192, NULL, 5, NULL);
   // xTaskCreate(arduinoTask, "Arduino Communication Task", 4096, NULL, 3, NULL);
-  xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 3, NULL);
   // xTaskCreate(accelerometerTask, "IMU", 4096, NULL, 3, NULL);
   // xTaskCreate(KF1Task, "KF1 Task", 10000, NULL, 3, NULL);
   // xTaskCreate(KF2Task, "KF2 Task", 10000, NULL, 3, NULL);
