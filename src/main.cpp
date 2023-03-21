@@ -7,6 +7,7 @@
 #include "Motor.h"            // Header for motor class
 #include "taskshare.h"        // Header for inter-task shared data
 #include "taskqueue.h"        // Header for inter-task data queues
+#include "encoder.h"          // Header for encoder class
 
 // TODO: Check pins
 
@@ -14,6 +15,8 @@
 #define PWM_PIN 13
 #define DIR_PIN 12
 #define BRK_PIN 34
+
+// Encoder pins
 #define ENA_PIN 35
 #define ENB_PIN 32
 
@@ -50,6 +53,9 @@ Share<float> accelerometerReading("Accelerometer Reading");
 // Create each motor driver object
 Motor motor(PWM_PIN, DIR_PIN, BRK_PIN);
 
+// Create encoder object
+encoder encoder(ENA_PIN, ENB_PIN);
+
 // Create Kalman Filters
 KalmanFilter KF1;
 KalmanFilter KF2;
@@ -72,7 +78,7 @@ void motorTask(void *p_params)
 
 void encoderTask(void *p_params)
 {
-  
+  int32_t 
 }
 
 //********************************************************************************
