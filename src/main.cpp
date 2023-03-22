@@ -259,34 +259,41 @@ void limitSwitchTask(void *p_params)
 // Acoustic positioning task
 void acousticTask(void *p_params)
 {
-  float spacing = 65; // spacing between receivers, mm
-  float zero_dist = 381; // spacing between transmitter and receiver in straight line, mm
-  float x_r = 0.0;
-  float x_l = 0.0;
-  float x = 0.0;
-  float d_r = 0.0;
-  float d_l = 0.0;
-  float c = 145;
-  float m = 0.684;
+  float spacing = 65;     // spacing between receivers, mm
+  float zero_dist = 381;  // spacing between transmitter and receiver in straight line, mm
+  float x_r = 0.0;        // calculated position of platform from right sensor
+  float x_l = 0.0;        // calculated position of platform from left sensor
+  float x = 0.0;          // average calculated position
+  float d_r = 0.0;        // calculated distance from right sensor to transmitter
+  float d_l = 0.0;        // calculated distance from left sensor to transmitter
+  float c = 145;          // calibration constant for distance offset of ultrasonic sensors
+  float m = 0.684;        // calibration constant for slope correction of ultrasonic sensors
   unsigned long startTime = 0;
   attachInterrupt(REC_R, rightInt, FALLING);
   attachInterrupt(REC_L, leftInt, FALLING);
   while (true)
   {
-    digitalWrite(TRANS, HIGH);
+    digitalWrite(TRANS, HIGH);  // turn transmitter on for 10 microseconds, then turn off
     delayMicroseconds(10);
     digitalWrite(TRANS, LOW);
-    startTime = micros();
-    vTaskDelay(100);
-
-    d_r = float((rightTime.get() - startTime) * 0.343 * m + c);
-    d_l = float((leftTime.get() - startTime) * 0.343 * m + c);
-    x_r = sqrt(abs(d_r*d_r - zero_dist*zero_dist)) + spacing/2;
-    x_l = sqrt(abs(d_l*d_l - zero_dist*zero_dist)) - spacing/2;
-    x = (x_r + x_l)/2;
-    acousticPosition.put(x);
-    Serial.println(x);
-
+    startTime = micros();       // start timer when pulse is sent
+    vTaskDelay(100);            // wait 100ms for pulse to be delivered
+    
+    if (leftTime.get != 0)      // if left sensor gives reading
+    {
+      d_r = float((rightTime.get() - startTime) * 0.343 * m + c); // distance is difference in time between start time and sensor...
+      d_l = float((leftTime.get() - startTime) * 0.343 * m + c);  // measurement time, with corrections from calibration constants
+      x_r = sqrt(abs(d_r*d_r - zero_dist*zero_dist)) + spacing/2; // assume vertical distance from sensors to transmitter is known...
+      x_l = sqrt(abs(d_l*d_l - zero_dist*zero_dist)) - spacing/2; // and construct two right triangles to get x position of platform...
+      x = (x_r + x_l)/2;                                          // centered between receivers, then take average
+      acousticPosition.put(x);
+      Serial.print("Acoustic position (mm): ");
+      Serial.println(x);
+    }
+    else
+    {
+      Serial.println("Error! Acoustic not working");
+    }
     x_r = 0.0;
     x_l = 0.0;
     x = 0.0;
