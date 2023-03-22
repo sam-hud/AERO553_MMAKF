@@ -1,12 +1,12 @@
 #include <Arduino.h>
-#include <Wire.h>                        // This library allows you to communicate with I2C devices.
-#include <Adafruit_GFX.h>                // Core graphics library
-#include <Adafruit_SSD1306.h>            // Hardware-specific library for SSD1306 displays
-#include <HardwareSerial.h>              // Serial communication
-#include <kalman.h>                      // Kalman Filter library
-#include "Motor.h"                       // Header for motor class
-#include "ME507-Support/src/taskshare.h" // Header for inter-task shared data
-#include "ME507-Support/src/taskqueue.h" // Header for inter-task data queues
+#include <Wire.h>                 // This library allows you to communicate with I2C devices.
+#include <Adafruit_GFX.h>         // Core graphics library
+#include <Adafruit_SSD1306.h>     // Hardware-specific library for SSD1306 displays
+#include <HardwareSerial.h>       // Serial communication
+#include <kalman.h>               // Kalman Filter library
+#include "Motor.h"                // Header for motor class
+#include "QueueShare/taskshare.h" // Header for inter-task shared data
+#include "QueueShare/taskqueue.h" // Header for inter-task data queues
 #include <ESP32Encoder.h>
 #include "IMU.h"
 #include <StateSpaceControl.h>
@@ -35,10 +35,9 @@
 // OLED
 #define OLED_SDA 21
 #define OLED_SCL 22
-#define OLED_RST 16
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
 
 /* Define Shares*/
 Share<float> motorSpeed("Motor Speed");
@@ -151,7 +150,7 @@ void displayTask(void *p_params)
 {
   while (true)
   {
-    /*
+
     display.clearDisplay();
     display.setTextSize(2);
     display.setTextColor(WHITE);
@@ -186,7 +185,7 @@ void displayTask(void *p_params)
     display.print(MMAEMotorPosition.get());
 
     display.display();
-    */
+
     /* Serial monitor output */
     Serial.println("Actual,KF1,KF2,KF3,MMAEKF");
     Serial.print(actualMotorPosition.get());
@@ -214,14 +213,32 @@ void controlInputTask(void *p_params)
     sliderPosition.put(sliderValue);
     // float mspeed = sliderValue;
     // motorSpeed.put(mspeed * 4);
-    // Serial.print("Slider Value:");
-    // Serial.println(sliderValue);
+    Serial.print("Slider Value:");
+    Serial.println(sliderValue);
     vTaskDelay(100); // Task period
   }
 }
 //********************************************************************************
 // Accelerometer reading task
 void accelerometerTask(void *p_params)
+{
+  uint8_t accelState = 0; // Set start case to 0
+  while (true)
+  {
+    // accelerometerReading.put(getIMU_y);
+    // Serial.print(",IMU x: ");
+    // Serial.print(getIMU_x());
+    Serial.print(",IMU y:");
+    Serial.print(getIMU_y());
+    // Serial.println(",IMU z:");
+    // Serial.print(getIMU_z());
+    vTaskDelay(100); // Task period
+  }
+}
+
+//********************************************************************************
+// Ultrasonic sensor reading task
+void ultraSonicTask(void *p_params)
 {
   uint8_t accelState = 0; // Set start case to 0
   while (true)
@@ -438,22 +455,22 @@ void setup()
   setupIMU();
 
   // Initialize OLED
-  // Wire.begin(OLED_SDA, OLED_SCL);
-  // if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false))
-  // {
-  //   Serial.println(F("OLED not found"));
-  //   while (1)
-  //     ;
-  // }
+  Wire.begin(OLED_SDA, OLED_SCL);
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false))
+  {
+    Serial.println(F("OLED not found"));
+    while (1)
+      ;
+  }
 
   /* Start FreeRTOS tasks */
-  // xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
+  xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
   xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 2, NULL);
   // xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
-  xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 2, NULL);
-  xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
-  xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
-  xTaskCreate(ssControllerTask, "State-Space Controller Task", 8192, NULL, 5, NULL);
+  // xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 2, NULL);
+  // xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
+  // xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
+  // xTaskCreate(ssControllerTask, "State-Space Controller Task", 8192, NULL, 5, NULL);
   // xTaskCreate(arduinoTask, "Arduino Communication Task", 4096, NULL, 3, NULL);
   // xTaskCreate(accelerometerTask, "IMU", 4096, NULL, 3, NULL);
   // xTaskCreate(KF1Task, "KF1 Task", 10000, NULL, 3, NULL);
