@@ -57,10 +57,10 @@ Share<float> acousticPosition("Acoustic Position");
 Queue<float> acousticTunerMeasured(50, "Acoustic Tuner Measured");
 Queue<float> acousticTunerCalculatedR(50, "Acoustic Tuner Calculated R");
 Queue<float> acousticTunerCalculatedL(50, "Acoustic Tuner Calculated L");
-Queue<float> accelReadings(10, "Accelerometer Readings");
+Share<float> accelReadings("Accelerometer Readings");
 Queue<float> velReadings(10, "Velocity Readings");
 Share<float> accelPosReading("Accelerometer Position Reading");
-Share<String> MMAEProp("MMAE Proportions");
+// Share<String> MMAEProp("MMAE Proportions");
 Queue<float> IMUTunerCalculated(50, "IMU Tuner Calculated");
 Queue<float> IMUTunerMeasured(50, "IMU Tuner Measured");
 
@@ -186,7 +186,7 @@ void displayTask(void *p_params)
     Serial.println(acousticPosition.get());
     Serial.print("Kalman acoustic position (mm): ");
     Serial.println(acousticPositionEstimate.get());
-    Serial.print("     Accel. position est (mm): ");
+    Serial.print("         Accel. position (mm): ");
     Serial.println(accelPosReading.get());
     Serial.print(" Accel. KF1 position est (mm): ");
     Serial.println(KF1PositionEstimate.get());
@@ -196,8 +196,9 @@ void displayTask(void *p_params)
     Serial.println(KF3PositionEstimate.get());
     Serial.print("       MMAE position est (mm): ");
     Serial.println(MMAEPositionEstimate.get());
-    Serial.print("              MMAE proportion: ");
-    Serial.println(MMAEProp.get());
+    // Serial.print("              MMAE proportion: ");
+    // Serial.println(MMAEProp.get());
+    Serial.println("-----------------------------");
 
     vTaskDelay(500); // Task period
   }
@@ -269,6 +270,8 @@ void velToPosTask(void *p_params)
   const TickType_t xFrequency = 1;
   TickType_t xLastWakeTime;
   float last = 0;
+  float m = 0.20892;
+  float b = 4.9602;
   while (true)
   {
     xLastWakeTime = xTaskGetTickCount();
@@ -281,9 +284,10 @@ void velToPosTask(void *p_params)
       vTaskDelayUntil(&xLastWakeTime, xFrequency);
       last = now;
     }
+    x = m*x + b;
     accelPosReading.put(x);
-    IMUTunerCalculated.put(x);
-    IMUTunerMeasured.put(actualMotorPosition.get());
+    // IMUTunerCalculated.put(x);
+    // IMUTunerMeasured.put(actualMotorPosition.get());
     // Serial.print("Pos:");
     // Serial.println(x);
   }
@@ -493,7 +497,7 @@ void acousticTunerTask(void *p_params)
       // Serial.print(", new_xr: ");
       // Serial.println(new_xr);
     }
-    vTaskDelay(50);
+    vTaskDelay(100);
   }
 }
 
@@ -501,6 +505,7 @@ void IMUTunerTask(void *p_params)
 {
   float new_x = 0.0;
   float new_y = 0.0;
+  float last_y = 0.0;
   uint16_t n = 0;
   float sum_x = 0.0;
   float sum_x2 = 0.0;
@@ -508,9 +513,15 @@ void IMUTunerTask(void *p_params)
   float sum_xy = 0.0;
   float m = 0.0;
   float b = 0.0;
+  float pos = 0.0;
   while (true)
   {
-    if (n >= 100)
+    // IMUTunerCalculated.put(accelPosReading.get());
+    // IMUTunerMeasured.put(actualMotorPosition.get());
+    pos = (n/20)*20 + 20;
+    sliderPosition.put(pos);
+
+    if (n >= 140)
     {
       m = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
       b = (sum_y - m * sum_x) / n;
@@ -525,22 +536,33 @@ void IMUTunerTask(void *p_params)
       sum_x2 = 0.0;
       sum_y = 0.0;
       sum_xy = 0.0;
+      last_y = 0.0;
       m = 0.0;
       b = 0.0;
     }
     if (IMUTunerCalculated.any())
     {
+      last_y = new_y;
       IMUTunerCalculated.get(new_x);
       IMUTunerMeasured.get(new_y);
-      sum_x = sum_x + new_x;
-      sum_y = sum_y + new_y;
-      sum_x2 = sum_x2 + new_x * new_x;
-      sum_xy = sum_xy + new_x * new_y;
-      n++;
-      Serial.print("new_y: ");
-      Serial.print(new_y);
-      Serial.print(", new_x: ");
-      Serial.println(new_x);
+
+      if ((new_y < (last_y + 2)) || (new_y > (last_y - 2)))
+      {
+        if ((new_x > 0) && (new_x < 650))
+        {
+          sum_x = sum_x + new_x;
+          sum_y = sum_y + new_y;
+          sum_x2 = sum_x2 + new_x * new_x;
+          sum_xy = sum_xy + new_x * new_y;
+          n++;
+          Serial.print("n: ");
+          Serial.print(n);
+          Serial.print(", new_y: ");
+          Serial.print(new_y );
+          Serial.print(", new_x: ");
+          Serial.println(new_x);
+        }
+      }
     }
     vTaskDelay(50);
   }
@@ -578,15 +600,15 @@ void KalmanFilterTask(void *p_params)
     float totalError = KF1Error + KF2Error + KF3Error;
 
     // Calculate weights
-    float KF1Weight = KF1Error / totalError;
-    float KF2Weight = KF2Error / totalError;
-    float KF3Weight = KF3Error / totalError;
+    float KF1Weight = 1 - KF1Error / totalError;
+    float KF2Weight = 1 - KF2Error / totalError;
+    float KF3Weight = 1 - KF3Error / totalError;
 
     // Calculate MMAE output
     float MMAEOutput = (KF1Estimate * KF1Weight) + (KF2Estimate * KF2Weight) + (KF3Estimate * KF3Weight);
     MMAEPositionEstimate.put(MMAEOutput);
-    String prop = String(KF1Weight) + "," + String(KF2Weight) + "," + String(KF3Weight);
-    MMAEProp.put(prop);
+    // String prop = String(KF1Weight) + "," + String(KF2Weight) + "," + String(KF3Weight);
+    // MMAEProp.put(prop);
 
     vTaskDelay(100); // Task period
   }
@@ -634,7 +656,7 @@ void setup()
   accelReadings.put(0);
   velReadings.put(0);
   accelPosReading.put(0);
-  MMAEProp.put("0,0,0");
+  // MMAEProp.put("0,0,0");
 
   // Setup IMU
   setupIMU();
@@ -657,14 +679,14 @@ void setup()
   xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 2, NULL);
 
   /*------ MMAE KF tasks ------*/
-  // xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
-  xTaskCreate(accelerometerTask, "Accelerometer Task", 4096, NULL, 3, NULL);
+  xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
+  xTaskCreate(accelerometerTask, "Accelerometer Task", 10000, NULL, 3, NULL);
   xTaskCreate(acousticTask, "Acoustic Task", 4096, NULL, 2, NULL);
   // xTaskCreate(acousticTunerTask, "Acoustic Tuner Task", 4096, NULL, 3, NULL);
   xTaskCreate(KalmanFilterTask, "MMAE Task", 10000, NULL, 3, NULL);
   xTaskCreate(accelToVelTask, "Accel to Vel Task", 4096, NULL, 2, NULL);
   xTaskCreate(velToPosTask, "Vel to Pos Task", 4096, NULL, 2, NULL);
-  xTaskCreate(IMUTunerTask, "IMU Tuner Task", 4096, NULL, 3, NULL);
+  // xTaskCreate(IMUTunerTask, "IMU Tuner Task", 4096, NULL, 3, NULL);
 }
 
 /* Main loop that does nothing (ensures FreeRTOS does not crash) */
