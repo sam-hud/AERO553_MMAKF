@@ -63,6 +63,8 @@ Share<float> accelPosReading("Accelerometer Position Reading");
 // Share<String> MMAEProp("MMAE Proportions");
 Queue<float> IMUTunerCalculated(50, "IMU Tuner Calculated");
 Queue<float> IMUTunerMeasured(50, "IMU Tuner Measured");
+Queue<float> accelReadingsKF(200, "Accelerometer Readings for KF");
+Share<float> KFV2Position("KF V2 Position");
 
 // Create each motor driver object
 Motor motor(PWM_PIN, DIR_PIN, BRK_PIN);
@@ -176,26 +178,28 @@ void displayTask(void *p_params)
     // display.display();
 
     /* Serial monitor output */
-    Serial.println("\n \n \n");
+    Serial.println("\n \n");
     Serial.println("-----------------------------");
     Serial.print("        Desired position (mm): ");
     Serial.println(sliderPosition.get());
     Serial.print("         Actual position (mm): ");
     Serial.println(actualMotorPosition.get());
     Serial.print("       Acoustic position (mm): ");
+    Serial.println(KFV2Position.get());
+    Serial.print("    KF acoustic position (mm): ");
     Serial.println(acousticPosition.get());
-    Serial.print("Kalman acoustic position (mm): ");
-    Serial.println(acousticPositionEstimate.get());
     Serial.print("         Accel. position (mm): ");
+    Serial.println(acousticPositionEstimate.get());
+    Serial.print("      KF accel. position (mm): ");
     Serial.println(accelPosReading.get());
-    Serial.print(" Accel. KF1 position est (mm): ");
+    Serial.print("    KF combined position (mm): ");
     Serial.println(KF1PositionEstimate.get());
-    Serial.print(" Accel. KF2 position est (mm): ");
-    Serial.println(KF2PositionEstimate.get());
-    Serial.print(" Accel. KF3 position est (mm): ");
-    Serial.println(KF3PositionEstimate.get());
     Serial.print("       MMAE position est (mm): ");
     Serial.println(MMAEPositionEstimate.get());
+    // Serial.print(" Accel. KF2 position est (mm): ");
+    // Serial.println(KF2PositionEstimate.get());
+    // Serial.print(" Accel. KF3 position est (mm): ");
+    // Serial.println(KF3PositionEstimate.get());
     // Serial.print("              MMAE proportion: ");
     // Serial.println(MMAEProp.get());
     Serial.println("-----------------------------");
@@ -211,15 +215,15 @@ void controlInputTask(void *p_params)
   {
     // TODO: read slider input and set shared variable
     int16_t sliderValue = analogRead(SLIDER_PIN);
-    if (sliderValue > 2200)
-      sliderValue = 2200;
-    sliderValue = sliderValue * 200 / 3500 + 20;
+    // if (sliderValue > 2200)
+    //   sliderValue = 2200;
+    sliderValue = sliderValue * 140 / 3500/1.13 + 20;
     sliderPosition.put(sliderValue);
     // float mspeed = sliderValue;
     // motorSpeed.put(mspeed * 4);
     // Serial.print("Slider Value:");
     // Serial.println(sliderValue);
-    vTaskDelay(1); // Task period
+    vTaskDelay(50); // Task period
   }
 }
 //********************************************************************************
@@ -233,6 +237,7 @@ void accelerometerTask(void *p_params)
     xLastWakeTime = xTaskGetTickCount();
     float a = (-1 * getIMU_y() * 9.81 / 16384 + 0.41); // m/s^2
     accelReadings.put(a);
+    accelReadingsKF.put(a);
     // Serial.print("Accel:");
     // Serial.println(a);
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
@@ -339,7 +344,7 @@ void acousticTask(void *p_params)
     delayMicroseconds(10);
     digitalWrite(TRANS, LOW);
     startTime = micros(); // start timer when pulse is sent
-    vTaskDelay(100);      // wait 100ms for pulse to be delivered
+    vTaskDelay(25);      // wait 100ms for pulse to be delivered
 
     if (leftTime.get() != 0) // if left sensor gives reading
     {
@@ -403,7 +408,7 @@ void acousticTask(void *p_params)
     d_l = 0.0;
     rightTime.put(0);
     leftTime.put(0);
-    vTaskDelay(100);
+    vTaskDelay(50);
   }
 }
 
@@ -514,6 +519,9 @@ void IMUTunerTask(void *p_params)
   float m = 0.0;
   float b = 0.0;
   float pos = 0.0;
+  float accelSum = 0.0;
+  int16_t n_a = 0;
+  float acouPos = 0.0;
   while (true)
   {
     // IMUTunerCalculated.put(accelPosReading.get());
@@ -540,15 +548,24 @@ void IMUTunerTask(void *p_params)
       m = 0.0;
       b = 0.0;
     }
-    if (IMUTunerCalculated.any())
+    if (IMUTunerMeasured.any())
     {
-      last_y = new_y;
-      IMUTunerCalculated.get(new_x);
-      IMUTunerMeasured.get(new_y);
+      last_y = new_x;
+      IMUTunerMeasured.get(new_x);
+      while (accelReadingsKF.any())
+        {
+          accelSum = accelSum + accelReadingsKF.get();
+          n_a++;
+        }
+      new_y = 1000 * accelSum/n_a;
+      accelSum = 0.0;
+      n_a = 0;
+      acouPos = acousticPosition.get();
+      new_y = new_y + (acouPos * -4.365) - 316.0;
 
-      if ((new_y < (last_y + 2)) || (new_y > (last_y - 2)))
+      if ((new_x < (last_y + 2)) && (new_x > (last_y - 2)))
       {
-        if ((new_x > 0) && (new_x < 650))
+        if ((new_y > -1000) && (new_y < 1000))
         {
           sum_x = sum_x + new_x;
           sum_y = sum_y + new_y;
@@ -614,6 +631,109 @@ void KalmanFilterTask(void *p_params)
   }
 }
 
+void KFV2Task(void *p_params)
+{
+  float dt = 0.1;
+  uint16_t n = 0;
+  float accelSum = 0.0;
+  Matrix<3,1> x_k_prev = {0, 0, 0};
+  Matrix<2,1> y_k = {0, 0};
+  Matrix<3,3> P_k_prev = {0, 0, 0,
+                          0, 0, 0,
+                          0, 0, 0};
+  Matrix<3,3> Fk = {1.0, dt, 0.5*dt*dt,
+                   0, 1.0, dt,
+                   0, 0, 1.0};
+  Matrix<2,3> H = {1.0, 0, 0,
+                   0, 0, 1.0};
+  Matrix<3,3> Q = {0.1, 0, 0,
+                   0, 0.1, 0,
+                   0, 0, 0.1};
+  Matrix<2,2> R;
+  R.Fill(0);
+  R(0,0) = 39.61;
+  R(1,1) = 13.82;
+  // Matrix<3,3> L = {1, 0, 0,
+  //                  0, 1, 0,
+  //                  0, 0, 1};
+  // Matrix<2,2> M = {1, 0,
+  //                  0, 1};
+  Matrix<3,1> x_k_m = {0, 0, 0};
+  Matrix<3,3> P_k_m = {0, 0, 0,
+                       0, 0, 0,
+                       0, 0, 0};
+  Matrix<2,2> W_k = {0, 0,
+                     0, 0};
+  Matrix<3,2> K_k = {0, 0,
+                     0, 0,
+                     0, 0};
+  Matrix<2,1> y_k_m = {0.0, 0.0};
+  Matrix<3,1> x_k;
+  x_k = {80.0, 0, 0};
+  x_k(0,0) = 80.0;
+  Matrix<3,3> P_k = {1.0, 0, 0,
+                     0, 1.0, 0,
+                     0, 0, 1.0};
+  Serial.println("------------");
+  Serial.println(Q(1,1));
+  Serial.println(Fk(1,1));
+  Serial.println(x_k(1,1));
+  
+  Serial.println(P_k(1,1));
+  // Serial.println(x_k_m(1,1));
+  Serial.println("------------");
+  while (not limitSwitchPressed.get());
+  vTaskDelay(2000);
+  while (true)
+  {
+    while (accelReadingsKF.any())
+    {
+      accelSum = accelSum + accelReadingsKF.get();
+      n++;
+    }
+    y_k(0,0) = acousticPosition.get();
+    y_k(1,0) = 1000 * (accelSum/n) + (y_k(0,0) * -4.365) - 316.0;
+    accelSum = 0.0;
+    n = 0;
+
+    x_k_prev = x_k;
+    P_k_prev = P_k;
+
+    // PREDICT
+    x_k_m = Fk * x_k_prev;
+    P_k_m = (Fk * P_k_prev * (~Fk)) + Q;
+    
+    // Serial.println("------------");
+    // Serial.println(y_k(0,0));
+    // Serial.println(y_k(1,0));
+    // Serial.println(x_k_m(0,0));
+    // Serial.println(P_k_m(0,0));
+    // Serial.println("------------");
+
+
+    // CORRECT
+    W_k = (H * P_k_m * (~H)) + R;
+    Invert(W_k);
+    K_k = P_k_m * (~H) * W_k;
+    y_k_m = H * x_k_m;
+    x_k = x_k_m + (K_k * (y_k - y_k_m));
+    P_k = P_k_m - (K_k * H * P_k_m);
+    // P_k = P_k_m - (K_k * H * P_k_m) - (P_k_m * (~H) * (~K_k)) + (K_k * W_k * (~K_k));
+    KFV2Position.put(x_k(0,0));
+    // Serial.println(R(0,0));
+    // Serial.println(K_k(0,0));
+    // Serial.println(y_k_m(0,0));
+    // Serial.println(x_k(0,0));
+    // Serial.println(P_k(0,0));
+    // Serial.println("------------");
+    // Serial.println(x_k(1,1));
+    // Serial.println(x_k(2,1));
+    // Serial.println(y_k(1,1));
+    // Serial.println(y_k(2,1));
+    // Serial.println("");
+    vTaskDelay(dt*1000);
+  }
+}
 //********************************************************************************
 // End of Task declarations
 //********************************************************************************
@@ -656,6 +776,7 @@ void setup()
   accelReadings.put(0);
   velReadings.put(0);
   accelPosReading.put(0);
+  KFV2Position.put(0.0);
   // MMAEProp.put("0,0,0");
 
   // Setup IMU
@@ -680,13 +801,14 @@ void setup()
 
   /*------ MMAE KF tasks ------*/
   xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
-  xTaskCreate(accelerometerTask, "Accelerometer Task", 10000, NULL, 3, NULL);
+  xTaskCreate(accelerometerTask, "Accelerometer Task", 32000, NULL, 3, NULL);
   xTaskCreate(acousticTask, "Acoustic Task", 4096, NULL, 2, NULL);
   // xTaskCreate(acousticTunerTask, "Acoustic Tuner Task", 4096, NULL, 3, NULL);
   xTaskCreate(KalmanFilterTask, "MMAE Task", 10000, NULL, 3, NULL);
   xTaskCreate(accelToVelTask, "Accel to Vel Task", 4096, NULL, 2, NULL);
   xTaskCreate(velToPosTask, "Vel to Pos Task", 4096, NULL, 2, NULL);
-  // xTaskCreate(IMUTunerTask, "IMU Tuner Task", 4096, NULL, 3, NULL);
+  //xTaskCreate(IMUTunerTask, "IMU Tuner Task", 4096, NULL, 3, NULL);
+  xTaskCreate(KFV2Task, "KF V2 Task", 16384, NULL, 5, NULL);
 }
 
 /* Main loop that does nothing (ensures FreeRTOS does not crash) */
