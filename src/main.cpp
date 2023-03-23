@@ -1,15 +1,15 @@
-#include <Arduino.h>
+#include <Arduino.h>              // Arduino core for the ESP32
 #include <Wire.h>                 // This library allows you to communicate with I2C devices.
 #include <Adafruit_GFX.h>         // Core graphics library
 #include <Adafruit_SSD1306.h>     // Hardware-specific library for SSD1306 displays
 #include <HardwareSerial.h>       // Serial communication
-#include "Motor.h"                // Header for motor class
-#include "QueueShare/taskshare.h" // Header for inter-task shared data
-#include "QueueShare/taskqueue.h" // Header for inter-task data queues
+#include "Motor.h"                // Library for motor class
+#include "QueueShare/taskshare.h" // Modified library for inter-task shared variables by J.R. Ridgeley
+#include "QueueShare/taskqueue.h" // Modified library for inter-task data queues by by J.R. Ridgeley
 #include <ESP32Encoder.h>
 #include "IMU.h"
-#include <StateSpaceControl.h>
-#include <SimpleKalmanFilter.h> // Kalman Filter library
+#include <StateSpaceControl.h> // State space controller library
+#include <SimpleKalmanFilter.h> // Modified 1D Kalman Filter library by Denys Sene, January, 1, 2017.
 
 // TODO: Check pins
 
@@ -44,9 +44,7 @@ Share<float> motorSpeed("Motor Speed");
 Share<bool> limitSwitchPressed("Limit Switch Pressed");
 Share<int16_t> sliderPosition("Slider Position");
 Share<float> actualMotorPosition("Actual Motor Position");
-Share<float> KF1PositionEstimate("KF1 Position");
-Share<float> KF2PositionEstimate("KF2 Position");
-Share<float> KF3PositionEstimate("KF3 Position");
+Share<float> IMUPositionEstimate("IMUKF Position");
 Share<float> acousticPositionEstimate("Acoustic Position");
 Share<float> MMAEPositionEstimate("MMAE Position");
 Share<float> accelerometerReading("Accelerometer Reading");
@@ -60,11 +58,16 @@ Queue<float> acousticTunerCalculatedL(50, "Acoustic Tuner Calculated L");
 Share<float> accelReadings("Accelerometer Readings");
 Queue<float> velReadings(10, "Velocity Readings");
 Share<float> accelPosReading("Accelerometer Position Reading");
-// Share<String> MMAEProp("MMAE Proportions");
 Queue<float> IMUTunerCalculated(50, "IMU Tuner Calculated");
 Queue<float> IMUTunerMeasured(50, "IMU Tuner Measured");
 Queue<float> accelReadingsKF(200, "Accelerometer Readings for KF");
 Share<float> KFV2Position("KF V2 Position");
+Share<float> combinedKFResidual("Combined KF Residual");
+Share<float> IMUKFResidual("IMU KF Residual");
+Share<float> acousticKFResidual("Acoustic KF Residual");
+Share<float> MMAEKF1Proportion("MMAE KF1 Proportion");
+Share<float> MMAEKF2Proportion("MMAE KF2 Proportion");
+Share<float> MMAEKF3Proportion("MMAE KF3 Proportion");
 
 // Create each motor driver object
 Motor motor(PWM_PIN, DIR_PIN, BRK_PIN);
@@ -74,11 +77,8 @@ ESP32Encoder encoder;
 
 // Create Kalman Filters. Change constants here
 // (Measurement Uncertainty, Estimation Uncertainty, Process Noise)
-SimpleKalmanFilter KF1(2, 2, 0.01);
-SimpleKalmanFilter KF2(2, 2, 0.01);
-SimpleKalmanFilter KF3(2, 2, 0.01);
-SimpleKalmanFilter ACOUSTICKF(2, 2, 0.01);
-SimpleKalmanFilter IMU(0.001, 0.0001, 0.001);
+SimpleKalmanFilter IMUKF(10, 2, 5);
+SimpleKalmanFilter ACOUSTICKF(1, 1, 0.01);
 
 // Create state-space controller
 MotorPositionModel model(0.0000011502, 0.01, 0.4982, 4.8, 0.05);
@@ -104,12 +104,13 @@ void leftInt()
 // Motor Task
 void motorTask(void *p_params)
 {
+  bool revFlag = false;
   while (limitSwitchPressed.get() == false)
   {
     motor.setSpeed(-120);
     vTaskDelay(100);
   }
-  motor.setSpeed(150);
+  motor.setSpeed(200);
   vTaskDelay(250);
   motor.setSpeed(0);
   accelPosReading.put(0);
@@ -117,6 +118,22 @@ void motorTask(void *p_params)
   while (true)
   {
     motor.setSpeed(motorSpeed.get());
+    // if ((actualMotorPosition.get() < 130) && not revFlag)
+    // {
+    //   motor.setSpeed(200);
+    // }
+    // else{
+    //   revFlag = true;
+    // }
+    
+    // if ((actualMotorPosition.get() > 25) && revFlag)
+    // {
+    //   revFlag = true;
+    //   motor.setSpeed(-150);
+    // }
+    // else{
+    //   revFlag = false;
+    // }
     vTaskDelay(10); // Task period
   }
 }
@@ -153,7 +170,7 @@ void ssControllerTask(void *p_params)
     actual_motor_pos = actualMotorPosition.get();
     ssController.update(actual_motor_pos, (dt / 1000));
     gain = ssController.u(0);
-    gain = gain * 255 / 50 / 12;
+    gain = gain * 255 / 40 / 12;
     motorSpeed.put(gain);
     // Serial.println(gain);
     vTaskDelay(dt);
@@ -164,9 +181,66 @@ void ssControllerTask(void *p_params)
 // OLED display task
 void displayTask(void *p_params)
 {
+  float positionerPE = 0.0;
+  float acousticPE = 0.0;
+  float acousticKFPE = 0.0;
+  float accelPE = 0.0;
+  float accelKFPE = 0.0;
+  float combinedKFPE = 0.0;
+  float MMAEPE = 0.0;
+  float PElist[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+  float PElistAvg[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+  uint8_t minPos = 0;
+  float min = 100.0;
+  uint8_t n = 0;
+  uint16_t PElistRankings[6] = {0, 0, 0, 0, 0, 0};
+  uint16_t PElistCounter = 0;
+  float max = 0.0;
+  uint8_t maxPos = 0;
+  float maxPE = 0.0;
+  sliderPosition.put(n*20 + 20);
+
   while (true)
   {
-
+    positionerPE = 100*abs(actualMotorPosition.get() - sliderPosition.get()) / sliderPosition.get();
+    acousticPE = 100*abs(acousticPosition.get() - actualMotorPosition.get()) / actualMotorPosition.get();
+    acousticKFPE = 100*abs(acousticPositionEstimate.get() - actualMotorPosition.get()) / actualMotorPosition.get();
+    accelPE = 100*abs(accelPosReading.get() - actualMotorPosition.get()) / actualMotorPosition.get();
+    accelKFPE = 100*abs(IMUPositionEstimate.get() - actualMotorPosition.get()) / actualMotorPosition.get();
+    combinedKFPE = 100*abs(KFV2Position.get() - actualMotorPosition.get()) / actualMotorPosition.get();
+    MMAEPE = 100*abs(MMAEPositionEstimate.get() - actualMotorPosition.get()) / actualMotorPosition.get();
+    PElist[0] = acousticPE;
+    PElist[1] = acousticKFPE;
+    PElist[2] = accelPE;
+    PElist[3] = accelKFPE;
+    PElist[4] = combinedKFPE;
+    PElist[5] = MMAEPE;
+    PElistAvg[0] += acousticPE;
+    PElistAvg[1] += acousticKFPE;
+    PElistAvg[2] += accelPE;
+    PElistAvg[3] += accelKFPE;
+    PElistAvg[4] += combinedKFPE;
+    PElistAvg[5] += MMAEPE;
+    
+    for (int i = 0; i < 6; i++)
+    {
+      if (PElist[i] < min) 
+      {
+        min = PElist[i];
+        minPos = i;
+      }
+    }
+    PElistRankings[minPos]++;
+    PElistCounter++;
+    for (int i = 0; i < 6; i++)
+    {
+      if (PElistRankings[i] > max) 
+      {
+        max = PElistRankings[i];
+        maxPos = i;
+      }
+    }
+    // maxPE = PElistAvg[1] / PElistCounter;
     // display.clearDisplay();
     // display.setTextSize(1);
     // display.setTextColor(WHITE);
@@ -178,33 +252,177 @@ void displayTask(void *p_params)
     // display.display();
 
     /* Serial monitor output */
-    Serial.println("\n \n");
+    Serial.println("\n \n \n \n");
     Serial.println("-----------------------------");
+    Serial.print("           Average best model: ");
+    switch (maxPos)
+    {
+      case 0:
+        Serial.println("Acoustic time-of-flight");
+        break;
+      case 1:
+        Serial.println("Acoustic time-of-flight (with KF)");
+        break;
+      case 2:
+        Serial.println("Accelerometer integration");
+        break;
+      case 3:
+        Serial.println("Accelerometer integration (with KF)");
+        break;
+      case 4:
+        Serial.println("Combined acoustic and accelerometer KF");
+        break;
+      case 5:
+        Serial.println("Multi-model adaptive estimation KF");
+        break;
+    }
+    // Serial.print("  Model average percent error: ");
+    // Serial.print(maxPE);
+    // Serial.println("%");
+    Serial.print("                Model is best: ");
+    Serial.print(100*max/PElistCounter);
+    Serial.print("%");
+    Serial.println(" of the time");
+    Serial.println("");
+    
+    Serial.print("  Best model for this dataset: ");
+    switch (minPos)
+    {
+      case 0:
+        Serial.println("Acoustic time-of-flight");
+        break;
+      case 1:
+        Serial.println("Acoustic time-of-flight (with KF)");
+        break;
+      case 2:
+        Serial.println("Accelerometer integration");
+        break;
+      case 3:
+        Serial.println("Accelerometer integration (with KF)");
+        break;
+      case 4:
+        Serial.println("Combined acoustic and accelerometer KF");
+        break;
+      case 5:
+        Serial.println("Multi-model adaptive estimation KF");
+        break;
+    }
+    Serial.print("          Model percent error: ");
+    Serial.print(min);
+    Serial.println("%");
+    Serial.println("");
+    
     Serial.print("        Desired position (mm): ");
     Serial.println(sliderPosition.get());
+    
     Serial.print("         Actual position (mm): ");
-    Serial.println(actualMotorPosition.get());
-    Serial.print("       Acoustic position (mm): ");
-    Serial.println(KFV2Position.get());
-    Serial.print("    KF acoustic position (mm): ");
-    Serial.println(acousticPosition.get());
+    Serial.print(actualMotorPosition.get());
+    Serial.print(", DC motor controller percent error: ");
+    Serial.print(positionerPE);
+    Serial.println("%");
+
     Serial.print("         Accel. position (mm): ");
-    Serial.println(acousticPositionEstimate.get());
+    Serial.print(accelPosReading.get());
+    Serial.print(", percent error: ");
+    Serial.print(accelPE);
+    Serial.println("%");
+
+    Serial.print("       Acoustic position (mm): ");
+    Serial.print(acousticPosition.get());
+    Serial.print(", percent error: ");
+    Serial.print(acousticPE);
+    Serial.println("%");
+
     Serial.print("      KF accel. position (mm): ");
-    Serial.println(accelPosReading.get());
+    Serial.print(IMUPositionEstimate.get());
+    Serial.print(", percent error: ");
+    Serial.print(accelKFPE);
+    Serial.println("%");
+
+    Serial.print("    KF acoustic position (mm): ");
+    Serial.print(acousticPositionEstimate.get());
+    Serial.print(", percent error: ");
+    Serial.print(acousticKFPE);
+    Serial.println("%");
+
     Serial.print("    KF combined position (mm): ");
-    Serial.println(KF1PositionEstimate.get());
-    Serial.print("       MMAE position est (mm): ");
-    Serial.println(MMAEPositionEstimate.get());
+    Serial.print(KFV2Position.get());
+    Serial.print(", percent error: ");
+    Serial.print(combinedKFPE);
+    Serial.println("%");
+
+    Serial.print("           MMAE position (mm): ");
+    Serial.print(MMAEPositionEstimate.get());
+    Serial.print(", percent error: ");
+    Serial.print(MMAEPE);
+    Serial.println("%");
+
+    Serial.print("          MMAE KF proportions: ");
+    Serial.print(MMAEKF1Proportion.get() * 100);
+    Serial.print("%, ");
+    Serial.print(MMAEKF2Proportion.get() * 100);
+    Serial.print("%, ");
+    Serial.print(MMAEKF3Proportion.get() * 100);
+    Serial.println("%");
+
+    Serial.println("-----------------------------");
+
+  
+
+
     // Serial.print(" Accel. KF2 position est (mm): ");
     // Serial.println(KF2PositionEstimate.get());
     // Serial.print(" Accel. KF3 position est (mm): ");
     // Serial.println(KF3PositionEstimate.get());
     // Serial.print("              MMAE proportion: ");
     // Serial.println(MMAEProp.get());
-    Serial.println("-----------------------------");
-
-    vTaskDelay(500); // Task period
+    minPos = 0;
+    min = 100.0;
+    n++;
+    vTaskDelay(200);
+    if (n > 7) n = 0;
+    sliderPosition.put(n*20 + 20);
+    vTaskDelay(1800); // Task period
+    if (n == 0) vTaskDelay(1000);
+  }
+}
+//********************************************************************************
+// CSV output task
+void csvOutputTask(void *p_params)
+{
+  while (true)
+  {
+    //CSV printout
+    Serial.print(actualMotorPosition.get());
+    Serial.print(",");
+    Serial.print(accelPosReading.get());
+    Serial.print(";");
+    Serial.print(actualMotorPosition.get());
+    Serial.print(",");
+    Serial.print(acousticPosition.get());
+    Serial.print(";");
+    Serial.print(actualMotorPosition.get());
+    Serial.print(",");
+    Serial.print(IMUPositionEstimate.get());
+    Serial.print(";");
+    Serial.print(actualMotorPosition.get());
+    Serial.print(",");
+    Serial.print(acousticPositionEstimate.get());
+    Serial.print(";");
+    Serial.print(actualMotorPosition.get());
+    Serial.print(",");
+    Serial.print(KFV2Position.get());
+    Serial.print(";");
+    Serial.print(actualMotorPosition.get());
+    Serial.print(",");
+    Serial.print(MMAEPositionEstimate.get());
+    Serial.print(";");
+    Serial.print(MMAEKF1Proportion.get());
+    Serial.print(",");
+    Serial.print(MMAEKF2Proportion.get());
+    Serial.print(",");
+    Serial.println(MMAEKF3Proportion.get());
+    vTaskDelay(100); // Task period
   }
 }
 //********************************************************************************
@@ -217,12 +435,8 @@ void controlInputTask(void *p_params)
     int16_t sliderValue = analogRead(SLIDER_PIN);
     // if (sliderValue > 2200)
     //   sliderValue = 2200;
-    sliderValue = sliderValue * 140 / 3500/1.13 + 20;
+    sliderValue = sliderValue * 160 / 3500/1.13 + 20;
     sliderPosition.put(sliderValue);
-    // float mspeed = sliderValue;
-    // motorSpeed.put(mspeed * 4);
-    // Serial.print("Slider Value:");
-    // Serial.println(sliderValue);
     vTaskDelay(50); // Task period
   }
 }
@@ -238,8 +452,6 @@ void accelerometerTask(void *p_params)
     float a = (-1 * getIMU_y() * 9.81 / 16384 + 0.41); // m/s^2
     accelReadings.put(a);
     accelReadingsKF.put(a);
-    // Serial.print("Accel:");
-    // Serial.println(a);
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
   }
 }
@@ -258,17 +470,12 @@ void accelToVelTask(void *p_params)
     {
       now = accelReadings.get();
       v += (now + last) * 0.5 * dt;
-      // Serial.println(a);
       vTaskDelayUntil(&xLastWakeTime, xFrequency);
       last = now;
     }
     velReadings.put(v);
-
-    // Serial.print("Velo:");
-    // Serial.println(v);
   }
 }
-
 void velToPosTask(void *p_params)
 {
   int8_t dt = 10;
@@ -305,7 +512,7 @@ void limitSwitchTask(void *p_params)
   while (true)
   {
     bool limitSwitchStatus = digitalRead(LIM_PIN);
-    if (limitSwitchStatus == LOW) // TODO: check if this is correct
+    if (limitSwitchStatus == LOW)
     {
       limitSwitchPressed.put(true);
       encoder.setCount(0);
@@ -598,34 +805,39 @@ void KalmanFilterTask(void *p_params)
     float acousticReading = acousticPosition.get();
 
     // Update KFs and store estimates
-    float KF1Estimate = KF1.updateEstimate(accelReading);
-    KF1PositionEstimate.put(KF1Estimate);
-    float KF2Estimate = KF2.updateEstimate(accelReading);
-    KF2PositionEstimate.put(KF2Estimate);
-    float KF3Estimate = KF3.updateEstimate(accelReading);
-    KF3PositionEstimate.put(KF3Estimate);
+    float IMUEstimate = IMUKF.updateEstimate(accelReading);
+    IMUPositionEstimate.put(IMUEstimate);
 
     float acousticEstimate = ACOUSTICKF.updateEstimate(acousticReading);
     acousticPositionEstimate.put(acousticEstimate);
 
-    // Calculate errors
-    float KF1Error = abs(KF1Estimate - acousticEstimate);
-    float KF2Error = abs(KF2Estimate - acousticEstimate);
-    float KF3Error = abs(KF3Estimate - acousticEstimate);
+    float combinedEstimate = KFV2Position.get();
 
-    // Calculate total error
-    float totalError = KF1Error + KF2Error + KF3Error;
+    // Get residual between KF estimate and measurement
+    float IMUKFError = IMUKF.getResidual();
+    float ACOUSTICKFError = ACOUSTICKF.getResidual();
+    float COMBINEDKFError = combinedKFResidual.get();
+    // Serial.println("-------");
+    // Serial.println(IMUKFError);
+    // Serial.println(ACOUSTICKFError);
+    // Serial.println(COMBINEDKFError);
+    // Serial.println("-------");
 
-    // Calculate weights
-    float KF1Weight = 1 - KF1Error / totalError;
-    float KF2Weight = 1 - KF2Error / totalError;
-    float KF3Weight = 1 - KF3Error / totalError;
+
+    // Calculate total residual
+    float totalError = IMUKFError + ACOUSTICKFError + COMBINEDKFError;
+
+    // Calculate MMAEKF weights
+    float KF1Weight = (1 - IMUKFError / totalError)/2;
+    float KF2Weight = (1 - ACOUSTICKFError / totalError)/2;
+    float KF3Weight = (1 - COMBINEDKFError / totalError)/2;
 
     // Calculate MMAE output
-    float MMAEOutput = (KF1Estimate * KF1Weight) + (KF2Estimate * KF2Weight) + (KF3Estimate * KF3Weight);
-    MMAEPositionEstimate.put(MMAEOutput);
-    // String prop = String(KF1Weight) + "," + String(KF2Weight) + "," + String(KF3Weight);
-    // MMAEProp.put(prop);
+    float MMAEOutput = (IMUEstimate * KF1Weight) + (acousticEstimate* KF2Weight) + (combinedEstimate * KF3Weight);
+    MMAEPositionEstimate.put(MMAEOutput); // Store MMAE output in shared variable
+    MMAEKF1Proportion.put(KF1Weight); // Store MMAE accelerometer KF proportion in shared variable
+    MMAEKF2Proportion.put(KF2Weight); // Store MMAE acoustic KF proportion in shared variable
+    MMAEKF3Proportion.put(KF3Weight); // Store MMAE combined KF proportion in shared variable
 
     vTaskDelay(100); // Task period
   }
@@ -720,6 +932,7 @@ void KFV2Task(void *p_params)
     P_k = P_k_m - (K_k * H * P_k_m);
     // P_k = P_k_m - (K_k * H * P_k_m) - (P_k_m * (~H) * (~K_k)) + (K_k * W_k * (~K_k));
     KFV2Position.put(x_k(0,0));
+    combinedKFResidual.put(abs(y_k(0,0) - y_k_m(0,0)));
     // Serial.println(R(0,0));
     // Serial.println(K_k(0,0));
     // Serial.println(y_k_m(0,0));
@@ -794,20 +1007,21 @@ void setup()
   /* Start FreeRTOS tasks */
   /*------ Platform moving tasks ------*/
   xTaskCreate(limitSwitchTask, "Limit Switch Task", 4096, NULL, 2, NULL);
-  xTaskCreate(motorTask, "Motor Task", 8192, NULL, 3, NULL);
+  xTaskCreate(motorTask, "Motor Task", 8192, NULL, 4, NULL);
   xTaskCreate(encoderTask, "Encoder Task", 4096, NULL, 4, NULL);
   xTaskCreate(ssControllerTask, "State-Space Controller Task", 8192, NULL, 5, NULL);
-  xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 2, NULL);
+  // xTaskCreate(controlInputTask, "Control input Task", 4096, NULL, 3, NULL);
 
   /*------ MMAE KF tasks ------*/
-  xTaskCreate(displayTask, "Display Task", 10000, NULL, 2, NULL);
+  xTaskCreate(displayTask, "Display Task", 10000, NULL, 5, NULL);
+  // xTaskCreate(csvOutputTask, "CSV Output Task", 4096, NULL, 2, NULL);
   xTaskCreate(accelerometerTask, "Accelerometer Task", 32000, NULL, 3, NULL);
   xTaskCreate(acousticTask, "Acoustic Task", 4096, NULL, 2, NULL);
   // xTaskCreate(acousticTunerTask, "Acoustic Tuner Task", 4096, NULL, 3, NULL);
   xTaskCreate(KalmanFilterTask, "MMAE Task", 10000, NULL, 3, NULL);
   xTaskCreate(accelToVelTask, "Accel to Vel Task", 4096, NULL, 2, NULL);
   xTaskCreate(velToPosTask, "Vel to Pos Task", 4096, NULL, 2, NULL);
-  //xTaskCreate(IMUTunerTask, "IMU Tuner Task", 4096, NULL, 3, NULL);
+  // xTaskCreate(IMUTunerTask, "IMU Tuner Task", 4096, NULL, 3, NULL);
   xTaskCreate(KFV2Task, "KF V2 Task", 16384, NULL, 5, NULL);
 }
 
